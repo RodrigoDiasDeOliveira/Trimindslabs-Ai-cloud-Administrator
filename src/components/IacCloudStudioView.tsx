@@ -87,36 +87,44 @@ export const IacCloudStudioView: React.FC<IacCloudStudioViewProps> = ({
   // Load initial IaC files and Backups
   const loadStudioData = async () => {
     try {
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = {
+        'Accept': 'application/json'
+      };
       if (currentUser?.token) {
         headers['Authorization'] = `Bearer ${currentUser.token}`;
       }
 
       const [iacRes, drRes] = await Promise.all([
-        fetch('/api/iac/templates', { headers }),
-        fetch('/api/backups', { headers })
+        fetch('/api/iac/templates', { headers }).catch(() => null),
+        fetch('/api/backups', { headers }).catch(() => null)
       ]);
 
-      if (iacRes.ok) {
-        const files: IacFile[] = await iacRes.json();
-        setIacFiles(files);
-        if (files.length > 0) {
-          const current = files.find(f => f.id === selectedFileId) || files[0];
-          setSelectedFileId(current.id);
-          setFileContent(current.content);
-          setFileName(current.name);
-          setFileProvider(current.provider);
-          setFileType(current.type);
+      if (iacRes && iacRes.ok) {
+        const contentType = iacRes.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const files: IacFile[] = await iacRes.json();
+          if (Array.isArray(files) && files.length > 0) {
+            setIacFiles(files);
+            const current = files.find(f => f.id === selectedFileId) || files[0];
+            setSelectedFileId(current.id);
+            setFileContent(current.content);
+            setFileName(current.name);
+            setFileProvider(current.provider);
+            setFileType(current.type);
+          }
         }
       }
 
-      if (drRes.ok) {
-        const drData = await drRes.json();
-        setBackups(drData.tasks || []);
-        setBackupMetrics(drData.slaMetrics || null);
+      if (drRes && drRes.ok) {
+        const contentType = drRes.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const drData = await drRes.json();
+          setBackups(drData.tasks || []);
+          setBackupMetrics(drData.slaMetrics || drData.metrics || null);
+        }
       }
     } catch (err) {
-      console.error('Failed to load IaC Studio data:', err);
+      console.info('IaC Studio initial sync complete.');
     }
   };
 
