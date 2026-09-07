@@ -15,21 +15,26 @@ import {
   ChevronDown, 
   Globe,
   Lock,
-  Layers
+  Layers,
+  Code2
 } from 'lucide-react';
 import { ProviderStatus, AppTheme, AuthUser, UserRole } from '../types';
 import { Language, translations } from '../i18n';
 
 interface HeaderProps {
-  providers: ProviderStatus[];
+  providers?: ProviderStatus[];
+  activeCloudCount?: number;
   currentTab: string;
-  onSelectTab: (tab: string) => void;
+  onSelectTab?: (tab: string) => void;
+  onTabChange?: (tab: string) => void;
   backendMode: 'embedded' | 'springboot';
-  onToggleBackendMode: () => void;
+  onToggleBackendMode?: () => void;
   theme: AppTheme;
-  onChangeTheme: (theme: AppTheme) => void;
+  onChangeTheme?: (theme: AppTheme) => void;
+  onThemeChange?: (theme: AppTheme) => void;
   language: Language;
-  onChangeLanguage: (lang: Language) => void;
+  onChangeLanguage?: (lang: Language) => void;
+  onLanguageChange?: (lang: Language) => void;
   currentUser: AuthUser | null;
   onOpenLogin: () => void;
   onLogout: () => void;
@@ -37,15 +42,19 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  providers,
+  providers = [],
+  activeCloudCount,
   currentTab,
   onSelectTab,
+  onTabChange,
   backendMode,
   onToggleBackendMode,
   theme,
   onChangeTheme,
+  onThemeChange,
   language,
   onChangeLanguage,
+  onLanguageChange,
   currentUser,
   onOpenLogin,
   onLogout,
@@ -56,10 +65,15 @@ export const Header: React.FC<HeaderProps> = ({
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
+  const handleTabChange = onSelectTab || onTabChange || (() => {});
+  const handleThemeChange = onChangeTheme || onThemeChange || (() => {});
+  const handleLanguageChange = onChangeLanguage || onLanguageChange || (() => {});
+
   const navTabs = [
     { id: 'dashboard', label: t.navDashboard, icon: Activity },
     { id: 'agent', label: t.navAgent, icon: Cpu },
     { id: 'resources', label: t.navResources, icon: Server },
+    { id: 'iac', label: t.navIac, icon: Code2 },
     { id: 'governance', label: t.navGovernance, icon: ShieldCheck },
     { id: 'audit', label: t.navAudit, icon: Database },
     { id: 'settings', label: t.navSettings, icon: Cloud },
@@ -175,7 +189,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="absolute right-0 mt-1.5 w-40 rounded-xl bg-slate-900 border border-slate-700 shadow-xl p-1 z-50 text-xs">
                 <button
                   onClick={() => {
-                    onChangeTheme('dark');
+                    handleThemeChange('dark');
                     setShowThemeMenu(false);
                   }}
                   className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
@@ -187,7 +201,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    onChangeTheme('midnight');
+                    handleThemeChange('midnight');
                     setShowThemeMenu(false);
                   }}
                   className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
@@ -199,7 +213,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    onChangeTheme('light');
+                    handleThemeChange('light');
                     setShowThemeMenu(false);
                   }}
                   className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
@@ -230,7 +244,7 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="absolute right-0 mt-1.5 w-32 rounded-xl bg-slate-900 border border-slate-700 shadow-xl p-1 z-50 text-xs">
                 <button
                   onClick={() => {
-                    onChangeLanguage('pt');
+                    handleLanguageChange('pt');
                     setShowLangMenu(false);
                   }}
                   className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
@@ -242,7 +256,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    onChangeLanguage('en');
+                    handleLanguageChange('en');
                     setShowLangMenu(false);
                   }}
                   className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
@@ -254,7 +268,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    onChangeLanguage('es');
+                    handleLanguageChange('es');
                     setShowLangMenu(false);
                   }}
                   className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-left transition-colors cursor-pointer ${
@@ -351,7 +365,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 key={tab.id}
                 id={`nav-${tab.id}`}
-                onClick={() => onSelectTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
                   isActive
                     ? 'bg-indigo-600 text-white shadow-sm'

@@ -6,6 +6,7 @@ import { ResourceExplorerView } from './components/ResourceExplorerView';
 import { GovernanceView } from './components/GovernanceView';
 import { AuditLedgerView } from './components/AuditLedgerView';
 import { CloudSettingsView } from './components/CloudSettingsView';
+import { IacCloudStudioView } from './components/IacCloudStudioView';
 import { LoginModal } from './components/LoginModal';
 import { AddCloudModal } from './components/AddCloudModal';
 import { 
@@ -369,6 +370,7 @@ export default function App() {
 
       {/* Top Application Header */}
       <Header
+        providers={providers}
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         activeCloudCount={providers.length}
@@ -423,6 +425,15 @@ export default function App() {
             theme={theme}
             language={language}
             currentUser={currentUser}
+          />
+        )}
+
+        {currentTab === 'iac' && (
+          <IacCloudStudioView
+            theme={theme}
+            language={language}
+            currentUser={currentUser}
+            onRefreshData={fetchData}
           />
         )}
 

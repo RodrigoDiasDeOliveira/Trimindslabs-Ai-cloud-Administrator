@@ -1,0 +1,75 @@
+{
+  "name": "ai-multicloud-agent-mcp",
+  "version": "1.0.0",
+  "description": "Model Context Protocol (MCP) Server for Enterprise Multi-Cloud Infrastructure Management",
+  "tools": [
+    {
+      "name": "multicloud_list_resources",
+      "description": "Lista e filtra recursos de infraestrutura entre AWS, Azure, GCP e OCI",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["ALL", "AWS", "AZURE", "GCP", "OCI"],
+            "description": "Filtro por provedor de nuvem"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["ALL", "COMPUTE", "STORAGE", "DATABASE", "NETWORKING", "SECURITY"],
+            "description": "Categoria do recurso"
+          }
+        }
+      }
+    },
+    {
+      "name": "multicloud_create_vm",
+      "description": "Provisiona máquina virtual via camada unificada com verificação OPA e Dry-Run",
+      "inputSchema": {
+        "type": "object",
+        "required": ["provider", "name", "instanceType"],
+        "properties": {
+          "provider": { "type": "string", "enum": ["AWS", "AZURE", "GCP", "OCI"] },
+          "name": { "type": "string", "description": "Nome DNS válido da instância" },
+          "instanceType": { "type": "string", "description": "Tipo da instância (ex: t3.large, Standard_D2s_v5)" },
+          "region": { "type": "string" },
+          "dryRun": { "type": "boolean", "description": "Se true, simula sem aplicar alterações reais" }
+        }
+      }
+    },
+    {
+      "name": "multicloud_run_backup",
+      "description": "Dispara replicação de backup multi-cloud imediata com verificação criptográfica",
+      "inputSchema": {
+        "type": "object",
+        "required": ["taskId"],
+        "properties": {
+          "taskId": { "type": "string", "description": "ID da tarefa de backup (ex: bck-001)" }
+        }
+      }
+    },
+    {
+      "name": "multicloud_evaluate_opa",
+      "description": "Executa avaliação de conformidade Open Policy Agent (OPA/Gatekeeper) sobre código IaC ou recurso",
+      "inputSchema": {
+        "type": "object",
+        "required": ["content", "type"],
+        "properties": {
+          "content": { "type": "string", "description": "Código Terraform, JSON ou YAML" },
+          "type": { "type": "string", "enum": ["terraform", "json", "yaml"] }
+        }
+      }
+    },
+    {
+      "name": "multicloud_provider_probe",
+      "description": "Executa probe de saúde real leve no provedor de nuvem selecionado",
+      "inputSchema": {
+        "type": "object",
+        "required": ["provider"],
+        "properties": {
+          "provider": { "type": "string", "enum": ["AWS", "AZURE", "GCP", "OCI"] }
+        }
+      }
+    }
+  ]
+}

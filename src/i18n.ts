@@ -61,6 +61,11 @@ export interface Translations {
   observerRestriction: string;
   exportLedger: string;
   costDistribution: string;
+  navIac: string;
+  navDr: string;
+  btnExecutiveReport: string;
+  loginSuccess: string;
+  cloudAddedSuccess: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -70,9 +75,14 @@ export const translations: Record<Language, Translations> = {
     navDashboard: 'Dashboard',
     navAgent: 'AI Agent Console',
     navResources: 'Recursos Multi-Cloud',
+    navIac: 'IaC & Nuvem Studio',
+    navDr: 'Backup & Disaster Recovery',
     navGovernance: 'Governança & FinOps',
     navAudit: 'Trilha de Auditoria',
     navSettings: 'Conexões & Nuvem',
+    btnExecutiveReport: 'Relatório Executivo',
+    loginSuccess: 'Autenticado com sucesso',
+    cloudAddedSuccess: 'Nuvem e recursos conectados com sucesso!',
     btnAddCloud: '+ Adicionar Nuvem',
     themeDark: 'Escuro Profundo',
     themeMidnight: 'Midnight Navy',
@@ -132,9 +142,14 @@ export const translations: Record<Language, Translations> = {
     navDashboard: 'Dashboard',
     navAgent: 'AI Agent Console',
     navResources: 'Multi-Cloud Resources',
+    navIac: 'IaC & Cloud Studio',
+    navDr: 'Backup & Disaster Recovery',
     navGovernance: 'Governance & FinOps',
     navAudit: 'Audit Trail',
     navSettings: 'Cloud Connections',
+    btnExecutiveReport: 'Executive Report',
+    loginSuccess: 'Successfully authenticated',
+    cloudAddedSuccess: 'Cloud and resources connected successfully!',
     btnAddCloud: '+ Add Cloud',
     themeDark: 'Deep Dark',
     themeMidnight: 'Midnight Navy',
@@ -194,9 +209,14 @@ export const translations: Record<Language, Translations> = {
     navDashboard: 'Panel',
     navAgent: 'Consola Agente IA',
     navResources: 'Recursos Multi-Nube',
+    navIac: 'Estudio IaC y Nube',
+    navDr: 'Copia de Seguridad y DR',
     navGovernance: 'Gobernanza & FinOps',
     navAudit: 'Pista de Auditoría',
     navSettings: 'Conexiones & Nube',
+    btnExecutiveReport: 'Informe Ejecutivo',
+    loginSuccess: 'Autenticado con éxito',
+    cloudAddedSuccess: '¡Nube y recursos conectados con éxito!',
     btnAddCloud: '+ Añadir Nube',
     themeDark: 'Oscuro Profundo',
     themeMidnight: 'Midnight Navy',

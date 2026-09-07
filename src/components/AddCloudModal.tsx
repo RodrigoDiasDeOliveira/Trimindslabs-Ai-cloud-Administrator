@@ -21,19 +21,22 @@ import { Language, translations } from '../i18n';
 interface AddCloudModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCloudAdded: (provider: any, addedResources: number) => void;
-  currentLanguage: Language;
-  theme: AppTheme;
+  onCloudAdded: (provider?: any, addedResources?: number) => void;
+  language?: Language;
+  currentLanguage?: Language;
+  theme?: AppTheme;
 }
 
 export const AddCloudModal: React.FC<AddCloudModalProps> = ({
   isOpen,
   onClose,
   onCloudAdded,
+  language,
   currentLanguage,
-  theme
+  theme = 'dark'
 }) => {
-  const t = translations[currentLanguage];
+  const activeLang = language || currentLanguage || 'pt';
+  const t = translations[activeLang];
 
   const [selectedProvider, setSelectedProvider] = useState<string>('AWS');
   const [defaultRegion, setDefaultRegion] = useState<string>('us-east-1');

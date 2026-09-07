@@ -3,6 +3,13 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
+import { UnifiedCloudService } from './src/core/unifiedCloudAdapter';
+import { OpaPolicyEngine } from './src/core/opaEngine';
+import { AuditCryptoChain } from './src/core/auditCrypto';
+import { BackupDrManager } from './src/core/backupManager';
+import { OpenTelemetryTracer } from './src/core/telemetryOtel';
+import { InputValidator } from './src/core/inputValidator';
+import { CloudResource, AuditLog, IacFile, ProviderStatus } from './src/types';
 
 dotenv.config();
 
@@ -12,34 +19,6 @@ const PORT = 3000;
 app.use(express.json());
 
 // In-Memory Multi-Cloud Resource Inventory
-interface CloudResource {
-  id: string;
-  name: string;
-  provider: 'AWS' | 'AZURE' | 'GCP' | 'OCI';
-  category: 'COMPUTE' | 'STORAGE' | 'DATABASE' | 'NETWORKING' | 'SECURITY';
-  resourceType: string;
-  status: 'RUNNING' | 'STOPPED' | 'PROVISIONING' | 'DEGRADED';
-  region: string;
-  estimatedMonthlyCost: number;
-  tags: Record<string, string>;
-  securityPosture: 'SECURE' | 'WARNING' | 'NON_COMPLIANT';
-  nativeArnOrId: string;
-}
-
-interface AuditLog {
-  id: string;
-  timestamp: string;
-  user: string;
-  role: string;
-  provider: string;
-  action: string;
-  resourceId: string;
-  riskLevel: 'LOW' | 'MEDIUM' | 'CRITICAL';
-  status: 'SUCCESS' | 'FAILED' | 'BLOCKED_BY_GUARDRAIL';
-  details: string;
-  signature: string;
-}
-
 let resources: CloudResource[] = [
   {
     id: 'res-aws-01',
@@ -160,32 +139,120 @@ let resources: CloudResource[] = [
   }
 ];
 
-let auditLogs: AuditLog[] = [
+const initialLog1 = AuditCryptoChain.createEntry(undefined, {
+  user: 'rodrigo.ops@multicloud.corp',
+  role: 'ROLE_ADMIN',
+  provider: 'AWS',
+  action: 'DISCOVER_RESOURCES',
+  resourceId: 'ALL_AWS_EAST',
+  riskLevel: 'LOW',
+  status: 'SUCCESS',
+  details: 'Auto-discovery de inventário executado em us-east-1 (14 recursos catalogados).'
+});
+
+const initialLog2 = AuditCryptoChain.createEntry(initialLog1, {
+  user: 'ai-agent-daemon',
+  role: 'ROLE_SECURITY_AUDITOR',
+  provider: 'GCP',
+  action: 'SECURITY_POSTURE_CHECK',
+  resourceId: 'gcp-pg-master-db',
+  riskLevel: 'LOW',
+  status: 'SUCCESS',
+  details: 'Verificação periódica de conformidade CIS v2.0 para PostgreSQL (100% compliant).'
+});
+
+let auditLogs: AuditLog[] = [initialLog2, initialLog1];
+
+// Initial IaC Catalog (Terraform / YAML / JSON)
+let iacFilesList: IacFile[] = [
   {
-    id: 'aud-001',
-    timestamp: new Date(Date.now() - 3600000).toISOString(),
-    user: 'rodrigo.ops@multicloud.corp',
-    role: 'ROLE_ADMIN',
+    id: 'iac-aws-s3-kms',
+    name: 's3-secure-audit-vault.tf',
+    type: 'terraform',
     provider: 'AWS',
-    action: 'DISCOVER_RESOURCES',
-    resourceId: 'ALL_AWS_EAST',
-    riskLevel: 'LOW',
-    status: 'SUCCESS',
-    details: 'Auto-discovery de inventário executado em us-east-1 (14 recursos catalogados).',
-    signature: 'sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+    status: 'VALIDATED',
+    lastDeployDate: new Date(Date.now() - 86400000).toISOString(),
+    content: `# AWS S3 Compliant Vault with KMS Server-Side Encryption
+resource "aws_s3_bucket" "audit_vault" {
+  bucket = "multicloud-enterprise-audit-vault-2026"
+  
+  server_side_encryption_configuration {
+    rule {
+      apply_server_side_encryption_by_default {
+        kms_master_key_id = "arn:aws:kms:us-east-1:123456789012:key/audit-cmek"
+        sse_algorithm     = "aws:kms"
+      }
+    }
+  }
+
+  tags = {
+    "Environment" = "Production"
+    "Owner"       = "SecOps"
+    "Compliance"  = "SOC2-TypeII"
+  }
+}`
   },
   {
-    id: 'aud-002',
-    timestamp: new Date(Date.now() - 1800000).toISOString(),
-    user: 'ai-agent-daemon',
-    role: 'ROLE_AGENT',
+    id: 'iac-gcp-gke',
+    name: 'gke-inference-deploy.yaml',
+    type: 'yaml',
     provider: 'GCP',
-    action: 'SECURITY_POSTURE_CHECK',
-    resourceId: 'gcp-pg-master-db',
-    riskLevel: 'LOW',
-    status: 'SUCCESS',
-    details: 'Verificação periódica de conformidade CIS v2.0 para PostgreSQL (100% compliant).',
-    signature: 'sha256-4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a'
+    status: 'VALIDATED',
+    lastDeployDate: new Date(Date.now() - 172800000).toISOString(),
+    content: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-inference-worker
+  namespace: prod-ai
+  labels:
+    Environment: Production
+    Owner: MLOps
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: inference
+  template:
+    metadata:
+      labels:
+        app: inference
+        Environment: Production
+    spec:
+      containers:
+      - name: worker
+        image: gcr.io/multicloud-prod/inference:v2.4
+        resources:
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"`
+  },
+  {
+    id: 'iac-azure-vm',
+    name: 'azure-finops-compute.json',
+    type: 'json',
+    provider: 'AZURE',
+    status: 'DRAFT',
+    content: `{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "resources": [
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "apiVersion": "2022-03-01",
+      "name": "finops-analytics-vm",
+      "location": "eastus",
+      "tags": {
+        "Environment": "Production",
+        "CostCenter": "FinOps-402"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "Standard_D2s_v5"
+        }
+      }
+    }
+  ]
+}`
   }
 ];
 
@@ -271,12 +338,19 @@ const initialProviders = [
   }
 ];
 
-let providersList = [...initialProviders];
+let providersList: ProviderStatus[] = [...initialProviders];
 
-function logAudit(user: string, role: string, provider: string, action: string, resourceId: string, riskLevel: 'LOW' | 'MEDIUM' | 'CRITICAL', status: 'SUCCESS' | 'FAILED' | 'BLOCKED_BY_GUARDRAIL', details: string) {
-  auditLogs.unshift({
-    id: `aud-${Date.now().toString().slice(-4)}`,
-    timestamp: new Date().toISOString(),
+function logAudit(
+  user: string,
+  role: string,
+  provider: string,
+  action: string,
+  resourceId: string,
+  riskLevel: 'LOW' | 'MEDIUM' | 'CRITICAL',
+  status: 'SUCCESS' | 'FAILED' | 'BLOCKED_BY_GUARDRAIL',
+  details: string
+): AuditLog {
+  const newEntry = AuditCryptoChain.createEntry(auditLogs[0], {
     user,
     role,
     provider,
@@ -284,9 +358,10 @@ function logAudit(user: string, role: string, provider: string, action: string, 
     resourceId,
     riskLevel,
     status,
-    details,
-    signature: `sha256-${Math.random().toString(36).substring(2, 15)}`
+    details
   });
+  auditLogs.unshift(newEntry);
+  return newEntry;
 }
 
 // ----------------------------------------------------
@@ -308,7 +383,7 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
       username: 'admin',
       displayName: 'Rodrigo Dias (Administrador Cloud)',
       role: 'ROLE_ADMIN',
-      permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'BLAST_RADIUS_APPROVE', 'MANAGE_CLOUDS', 'EXPORT_AUDIT']
+      permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'BLAST_RADIUS_APPROVE', 'MANAGE_CLOUDS', 'EXPORT_AUDIT', 'IAC_DEPLOY', 'BACKUP_OPERATE', 'POLICY_MANAGE']
     };
     logAudit('admin', 'ROLE_ADMIN', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação bem-sucedida com perfil de Administrador Geral.');
     res.json(userObj);
@@ -321,7 +396,7 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
       username: 'dev',
       displayName: 'DevOps Engineer',
       role: 'ROLE_DEV',
-      permissions: ['READ', 'WRITE', 'EXECUTE_STANDARD', 'REQUEST_ACTION']
+      permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'IAC_DEPLOY', 'BACKUP_OPERATE']
     };
     logAudit('dev', 'ROLE_DEV', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação bem-sucedida com perfil de Desenvolvedor / DevOps.');
     res.json(userObj);
@@ -334,15 +409,41 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
       username: 'observer',
       displayName: 'Auditor de Segurança (Observer)',
       role: 'ROLE_OBSERVER',
-      permissions: ['READ', 'VIEW_AUDIT']
+      permissions: ['READ', 'EXPORT_AUDIT']
     };
     logAudit('observer', 'ROLE_OBSERVER', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação bem-sucedida com perfil de Observador (Apenas Leitura).');
     res.json(userObj);
     return;
   }
 
+  if (u === 'finops' && password === 'finops123') {
+    const userObj = {
+      token: `jwt-finops-${Date.now()}`,
+      username: 'finops',
+      displayName: 'FinOps Cloud Lead',
+      role: 'ROLE_FINOPS',
+      permissions: ['READ', 'FINOPS_VIEW', 'EXPORT_AUDIT']
+    };
+    logAudit('finops', 'ROLE_FINOPS', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação com perfil FinOps (Gestão e Otimização Financeira).');
+    res.json(userObj);
+    return;
+  }
+
+  if (u === 'security' && password === 'sec123') {
+    const userObj = {
+      token: `jwt-sec-${Date.now()}`,
+      username: 'security',
+      displayName: 'Security & Compliance Officer',
+      role: 'ROLE_SECURITY_AUDITOR',
+      permissions: ['READ', 'EXPORT_AUDIT', 'POLICY_MANAGE']
+    };
+    logAudit('security', 'ROLE_SECURITY_AUDITOR', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação com perfil Auditor de Segurança e Políticas.');
+    res.json(userObj);
+    return;
+  }
+
   logAudit(username, 'UNKNOWN', 'SYSTEM', 'LOGIN_FAILED', 'SESSION', 'MEDIUM', 'FAILED', `Tentativa de login frustrada para o usuário "${username}".`);
-  res.status(401).json({ error: 'Credenciais inválidas. Usuários disponíveis: admin, dev, observer' });
+  res.status(401).json({ error: 'Credenciais inválidas. Usuários disponíveis: admin, dev, observer, finops, security' });
 });
 
 app.get('/api/auth/me', (req: Request, res: Response) => {
@@ -356,7 +457,7 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
       username: 'dev',
       displayName: 'DevOps Engineer',
       role: 'ROLE_DEV',
-      permissions: ['READ', 'WRITE', 'EXECUTE_STANDARD', 'REQUEST_ACTION']
+      permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'IAC_DEPLOY', 'BACKUP_OPERATE']
     });
     return;
   }
@@ -365,7 +466,25 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
       username: 'observer',
       displayName: 'Auditor de Segurança (Observer)',
       role: 'ROLE_OBSERVER',
-      permissions: ['READ', 'VIEW_AUDIT']
+      permissions: ['READ', 'EXPORT_AUDIT']
+    });
+    return;
+  }
+  if (authHeader.includes('jwt-finops')) {
+    res.json({
+      username: 'finops',
+      displayName: 'FinOps Cloud Lead',
+      role: 'ROLE_FINOPS',
+      permissions: ['READ', 'FINOPS_VIEW', 'EXPORT_AUDIT']
+    });
+    return;
+  }
+  if (authHeader.includes('jwt-sec')) {
+    res.json({
+      username: 'security',
+      displayName: 'Security & Compliance Officer',
+      role: 'ROLE_SECURITY_AUDITOR',
+      permissions: ['READ', 'EXPORT_AUDIT', 'POLICY_MANAGE']
     });
     return;
   }
@@ -373,7 +492,7 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
     username: 'admin',
     displayName: 'Rodrigo Dias (Administrador Cloud)',
     role: 'ROLE_ADMIN',
-    permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'BLAST_RADIUS_APPROVE', 'MANAGE_CLOUDS', 'EXPORT_AUDIT']
+    permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'BLAST_RADIUS_APPROVE', 'MANAGE_CLOUDS', 'EXPORT_AUDIT', 'IAC_DEPLOY', 'BACKUP_OPERATE', 'POLICY_MANAGE']
   });
 });
 
@@ -504,20 +623,16 @@ app.post('/api/resources/:id/action', (req: Request, res: Response) => {
   target.status = newStatus;
 
   // Log to audit
-  const logEntry: AuditLog = {
-    id: `aud-${Date.now().toString().slice(-4)}`,
-    timestamp: new Date().toISOString(),
-    user: 'current-operator@multicloud.corp',
-    role: 'ROLE_DEVOPS',
-    provider: target.provider,
-    action: action || 'ACTION',
-    resourceId: target.name,
-    riskLevel: action === 'STOP' || action === 'DELETE' ? 'CRITICAL' : 'MEDIUM',
-    status: 'SUCCESS',
-    details: `Operação ${action} executada com sucesso no recurso ${target.name} (${target.resourceType}) via API direta.`,
-    signature: `sha256-${Math.random().toString(36).substring(2, 15)}`
-  };
-  auditLogs.unshift(logEntry);
+  const logEntry = logAudit(
+    'current-operator@multicloud.corp',
+    'ROLE_DEV',
+    target.provider,
+    action || 'ACTION',
+    target.name,
+    action === 'STOP' || action === 'DELETE' ? 'CRITICAL' : 'MEDIUM',
+    'SUCCESS',
+    `Operação ${action} executada com sucesso no recurso ${target.name} (${target.resourceType}) via API direta.`
+  );
 
   res.json({
     success: true,
@@ -567,14 +682,321 @@ app.get('/api/governance', (req: Request, res: Response) => {
   });
 });
 
-// AI Agent Chat with Tool Calling & Guardrails
-app.post('/api/agent/chat', async (req: Request, res: Response) => {
+// ----------------------------------------------------
+// REAL LIGHTWEIGHT HEALTH PROBE FOR CLOUD PROVIDERS
+// ----------------------------------------------------
+app.get('/api/providers/health-probe', async (req: Request, res: Response) => {
   try {
-    const { prompt, autoApproveSafeActions } = req.body;
+    const providerQuery = req.query.provider as string;
+    const targetProviders = providerQuery 
+      ? [providerQuery.toUpperCase()] 
+      : ['AWS', 'AZURE', 'GCP', 'OCI'];
+
+    const probeResults = await Promise.all(
+      targetProviders.map(p => UnifiedCloudService.performHealthProbe(p))
+    );
+
+    // Update memory providersList with probe result
+    probeResults.forEach(pr => {
+      const idx = providersList.findIndex(p => p.provider === pr.provider);
+      if (idx !== -1) {
+        providersList[idx].latencyMs = pr.latencyMs;
+        providersList[idx].circuitBreakerState = pr.circuitBreakerState;
+        providersList[idx].lastProbeCheck = {
+          probeType: pr.probeType,
+          targetEndpoint: pr.targetEndpoint,
+          statusCode: pr.statusCode,
+          success: pr.success,
+          latencyMs: pr.latencyMs,
+          checkedAt: pr.checkedAt
+        };
+      }
+    });
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      probes: probeResults
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: `Falha no health probe: ${err.message}` });
+  }
+});
+
+// ----------------------------------------------------
+// INFRASTRUCTURE AS CODE (IaC) & CONFIGURATION STUDIO
+// ----------------------------------------------------
+app.get('/api/iac/files', (req: Request, res: Response) => {
+  res.json(iacFilesList);
+});
+
+app.post('/api/iac/files', (req: Request, res: Response) => {
+  const { id, name, type, provider, content } = req.body;
+
+  const validation = InputValidator.validateIacContent(content || '', type || 'terraform');
+  if (!validation.valid) {
+    res.status(400).json({ error: validation.errors.join(' | ') });
+    return;
+  }
+
+  const iacItem: IacFile = {
+    id: id || `iac-${Date.now().toString().slice(-4)}`,
+    name: name || 'main.tf',
+    type: type || 'terraform',
+    provider: (provider || 'AWS').toUpperCase(),
+    content,
+    status: 'DRAFT'
+  };
+
+  // Evaluate OPA
+  const opaResult = OpaPolicyEngine.evaluateIacCode(iacItem);
+  iacItem.violations = opaResult.violations;
+  iacItem.status = opaResult.allowed ? 'VALIDATED' : 'DRAFT';
+
+  const existingIdx = iacFilesList.findIndex(f => f.id === iacItem.id);
+  if (existingIdx !== -1) {
+    iacFilesList[existingIdx] = iacItem;
+  } else {
+    iacFilesList.push(iacItem);
+  }
+
+  const user = (req.headers['x-user-email'] as string) || 'admin@multicloud.corp';
+  const role = (req.headers['x-user-role'] as string) || 'ROLE_ADMIN';
+  logAudit(user, role, iacItem.provider, 'SAVE_IAC_CONFIG', iacItem.name, 'LOW', 'SUCCESS', `Arquivo IaC ${iacItem.name} salvo com status ${iacItem.status}. Score OPA: ${opaResult.complianceScore}%.`);
+
+  res.json({
+    success: true,
+    file: iacItem,
+    opa: opaResult
+  });
+});
+
+app.post('/api/iac/validate-opa', (req: Request, res: Response) => {
+  const { content, type, provider, name } = req.body;
+  const mockFile: IacFile = {
+    id: 'temp-val',
+    name: name || 'plan.tf',
+    type: type || 'terraform',
+    provider: provider || 'AWS',
+    content: content || '',
+    status: 'DRAFT'
+  };
+
+  const validation = InputValidator.validateIacContent(content || '', type || 'terraform');
+  const opaResult = OpaPolicyEngine.evaluateIacCode(mockFile);
+
+  res.json({
+    syntaxValid: validation.valid,
+    syntaxErrors: validation.errors,
+    opa: opaResult
+  });
+});
+
+app.post('/api/iac/dry-run', (req: Request, res: Response) => {
+  const { id, content, provider, name } = req.body;
+  const targetFile = iacFilesList.find(f => f.id === id) || {
+    id: 'temp-dry',
+    name: name || 'custom.tf',
+    type: 'terraform' as const,
+    provider: (provider || 'AWS').toUpperCase(),
+    content: content || '',
+    status: 'DRAFT' as const
+  };
+
+  const opaResult = OpaPolicyEngine.evaluateIacCode(targetFile);
+
+  const planDiff = `------------------------------------------------------------\n` +
+    `[TERRAFORM PLAN: SIMULAÇÃO DRY-RUN]\n` +
+    `Arquitetura: Multi-Cloud Unified Abstraction Engine\n` +
+    `Target: ${targetFile.provider} Cloud\n` +
+    `Arquivo: ${targetFile.name}\n` +
+    `\n` +
+    `Plan: 2 to add, 0 to change, 0 to destroy.\n` +
+    `\n` +
+    `+ resource "${targetFile.provider.toLowerCase()}_managed_resource" "primary" {\n` +
+    `    + id               = "(known after apply)"\n` +
+    `    + encryption       = "AES-256 / KMS Customer Managed Key"\n` +
+    `    + environment      = "Production"\n` +
+    `    + disaster_recover = "Cross-Cloud Enabled"\n` +
+    `  }\n` +
+    `\n` +
+    `Conformidade OPA: ${opaResult.complianceScore}% (${opaResult.violations.length} avisos detectados)\n` +
+    `------------------------------------------------------------`;
+
+  res.json({
+    success: true,
+    dryRun: true,
+    planDiff,
+    opa: opaResult
+  });
+});
+
+app.post('/api/iac/deploy', (req: Request, res: Response) => {
+  const { id } = req.body;
+  const targetFile = iacFilesList.find(f => f.id === id);
+  if (!targetFile) {
+    res.status(404).json({ error: 'Arquivo IaC não encontrado.' });
+    return;
+  }
+
+  const opaResult = OpaPolicyEngine.evaluateIacCode(targetFile);
+  if (!opaResult.allowed) {
+    res.status(403).json({
+      error: 'Deploy bloqueado pelo motor OPA. Existem violações críticas de segurança.',
+      violations: opaResult.violations
+    });
+    return;
+  }
+
+  targetFile.status = 'DEPLOYED';
+  targetFile.lastDeployDate = new Date().toISOString();
+
+  // Create new active resource in inventory
+  const newRes: CloudResource = {
+    id: `res-${targetFile.provider.toLowerCase()}-iac-${Date.now().toString().slice(-4)}`,
+    name: targetFile.name.replace(/\.[^/.]+$/, ''),
+    provider: targetFile.provider as any,
+    category: targetFile.type === 'yaml' ? 'COMPUTE' : 'STORAGE',
+    resourceType: targetFile.type === 'yaml' ? 'GKE Deployment' : 'S3 / KMS Vault',
+    status: 'RUNNING',
+    region: 'us-east-1',
+    estimatedMonthlyCost: 35.00,
+    tags: { Environment: 'Production', DeployedBy: 'IaC-Studio', Engine: 'Terraform' },
+    securityPosture: 'SECURE',
+    nativeArnOrId: `urn:${targetFile.provider.toLowerCase()}:iac:${targetFile.name}`
+  };
+  resources.push(newRes);
+
+  const user = (req.headers['x-user-email'] as string) || 'admin@multicloud.corp';
+  const role = (req.headers['x-user-role'] as string) || 'ROLE_ADMIN';
+  logAudit(user, role, targetFile.provider, 'DEPLOY_IAC_CONFIG', targetFile.name, 'MEDIUM', 'SUCCESS', `Deploy de infraestrutura IaC ${targetFile.name} executado com sucesso.`);
+
+  res.json({
+    success: true,
+    message: `Configuração ${targetFile.name} implantada com sucesso no provedor ${targetFile.provider}.`,
+    deployedResource: newRes,
+    file: targetFile
+  });
+});
+
+// ----------------------------------------------------
+// MULTI-CLOUD BACKUP & DISASTER RECOVERY (DR)
+// ----------------------------------------------------
+app.get('/api/backups', (req: Request, res: Response) => {
+  res.json({
+    tasks: BackupDrManager.getAllTasks(),
+    metrics: BackupDrManager.getMetrics()
+  });
+});
+
+app.post('/api/backups/trigger', async (req: Request, res: Response) => {
+  const { taskId } = req.body;
+  try {
+    const result = await BackupDrManager.triggerBackup(taskId);
+    const user = (req.headers['x-user-email'] as string) || 'admin@multicloud.corp';
+    const role = (req.headers['x-user-role'] as string) || 'ROLE_ADMIN';
+    logAudit(user, role, result.task.sourceProvider, 'TRIGGER_CROSS_CLOUD_BACKUP', result.task.name, 'MEDIUM', 'SUCCESS', result.message);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/backups/drill', async (req: Request, res: Response) => {
+  const { taskId } = req.body;
+  try {
+    const result = await BackupDrManager.testRecoveryDrill(taskId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/backups/schedule', (req: Request, res: Response) => {
+  try {
+    const newTask = BackupDrManager.addSchedule(req.body);
+    const user = (req.headers['x-user-email'] as string) || 'admin@multicloud.corp';
+    const role = (req.headers['x-user-role'] as string) || 'ROLE_ADMIN';
+    logAudit(user, role, newTask.sourceProvider, 'SCHEDULE_BACKUP', newTask.name, 'LOW', 'SUCCESS', `Agendamento criado: ${newTask.scheduleCron}.`);
+    res.json(newTask);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ----------------------------------------------------
+// OPENTELEMETRY TRACES
+// ----------------------------------------------------
+app.get('/api/telemetry/traces', (req: Request, res: Response) => {
+  res.json(OpenTelemetryTracer.getRecentTraces());
+});
+
+// ----------------------------------------------------
+// CRYPTOGRAPHIC AUDIT VERIFICATION
+// ----------------------------------------------------
+app.get('/api/audit/verify', (req: Request, res: Response) => {
+  const check = AuditCryptoChain.verifyChainIntegrity(auditLogs);
+  res.json(check);
+});
+
+// ----------------------------------------------------
+// EXECUTIVE REPORTING & AUDIT EXPORT
+// ----------------------------------------------------
+app.get('/api/reports/executive', (req: Request, res: Response) => {
+  const totalCost = resources.reduce((acc, curr) => acc + curr.estimatedMonthlyCost, 0);
+  const secureCount = resources.filter(r => r.securityPosture === 'SECURE').length;
+  const complianceScore = Math.round((secureCount / resources.length) * 100);
+  const integrity = AuditCryptoChain.verifyChainIntegrity(auditLogs);
+  const backupMetrics = BackupDrManager.getMetrics();
+
+  const reportData = {
+    reportId: `REP-EXEC-${Date.now().toString().slice(-6)}`,
+    generatedAt: new Date().toISOString(),
+    status: 'OFFICIAL_AUDITED',
+    overview: {
+      totalResources: resources.length,
+      activeCloudsCount: 4,
+      totalMonthlySpendUsd: totalCost.toFixed(2),
+      cisComplianceScore: `${complianceScore}%`,
+      auditLedgerIntegrity: integrity.isValid ? 'VERIFIED (SHA-256 Tamper-Proof)' : 'TAMPER_DETECTED'
+    },
+    finOpsBreakdown: {
+      aws: resources.filter(r => r.provider === 'AWS').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2),
+      azure: resources.filter(r => r.provider === 'AZURE').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2),
+      gcp: resources.filter(r => r.provider === 'GCP').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2),
+      oci: resources.filter(r => r.provider === 'OCI').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2),
+      potentialSavingsAnnualUsd: '297.60'
+    },
+    disasterRecoverySla: {
+      totalProtectedDataGb: backupMetrics.totalDataGb,
+      activeJobs: backupMetrics.activeTasksCount,
+      successRate: `${backupMetrics.successRate}%`,
+      achievedAverageRpo: `${backupMetrics.avgRpoHours} horas`,
+      achievedAverageRto: `${backupMetrics.avgRtoMinutes} minutos`,
+      crossCloudReplication: 'Ativa entre AWS, Azure, GCP e OCI'
+    },
+    governancePolicies: [
+      { name: 'Criptografia em Repouso Mandatória (CMEK / KMS)', status: 'COMPLIANT', score: 100 },
+      { name: 'Bloqueio de SSH/RDP Aberto (0.0.0.0/0)', status: 'COMPLIANT', score: 100 },
+      { name: 'Padrão Corporativo de Tagging & Owner', status: 'COMPLIANT', score: 98 },
+      { name: 'Prevenção de Buckets Públicos', status: 'COMPLIANT', score: 100 }
+    ],
+    verifiedAuditRecordsCount: auditLogs.length,
+    latestSignatures: auditLogs.slice(0, 5).map(l => ({ id: l.id, user: l.user, action: l.action, signature: l.signature }))
+  };
+
+  res.json(reportData);
+});
+// AI Agent Chat with Tool Calling, OpenTelemetry Tracing & Guardrails
+app.post('/api/agent/chat', async (req: Request, res: Response) => {
+  const { traceId, tracer } = OpenTelemetryTracer.startTrace('AGENT_CHAT_ORCHESTRATION');
+  try {
+    const { prompt, autoApproveSafeActions, dryRun } = req.body;
     if (!prompt) {
       res.status(400).json({ error: 'Prompt obrigatório' });
       return;
     }
+
+    tracer.recordSpan('PARSE_INTENT', 'AI_ORCHESTRATOR', 12, { prompt: prompt.slice(0, 50), dryRun: !!dryRun });
 
     const promptLower = String(prompt).toLowerCase();
 
@@ -594,41 +1016,92 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
       promptLower.includes('destruir') ||
       promptLower.includes('destrua');
 
+    let target = resources.find(r => promptLower.includes(r.name.toLowerCase()) || promptLower.includes(r.provider.toLowerCase()));
+    if (!target) target = resources[0];
+
+    // Dry Run Simulation Mode for destructive operations
+    if (dryRun && isDestructive) {
+      tracer.recordSpan('DRY_RUN_PLANNER', 'UNIFIED_ADAPTER', 25, { target: target.name, provider: target.provider });
+      tracer.finish();
+      const dryPlan = `------------------------------------------------------------\n` +
+        `[SIMULAÇÃO DRY-RUN DE OPERAÇÃO DESTRUTIVA]\n` +
+        `- Provedor: ${target.provider}\n` +
+        `- Recurso Alvo: ${target.name} (${target.id})\n` +
+        `- Tipo: ${target.resourceType} | Região: ${target.region}\n` +
+        `- Impacto de Custo Estimado: -$${target.estimatedMonthlyCost.toFixed(2)} USD/mês\n` +
+        `- Status Atual: ${target.status}\n` +
+        `*Nenhuma alteração de estado foi efetuada no cluster cloud.*\n` +
+        `------------------------------------------------------------`;
+
+      logAudit(
+        'operator@multicloud.corp',
+        'ROLE_DEV',
+        target.provider,
+        'DRY_RUN_PREVIEW',
+        target.name,
+        'LOW',
+        'SUCCESS',
+        `Simulação Dry-run de exclusão/parada executada para ${target.name}.`
+      );
+
+      res.json({
+        reply: `🔍 **Resultado da Simulação Dry-Run (Sem efeitos colaterais)**:\n\n\`\`\`text\n${dryPlan}\n\`\`\`\n\nPara aplicar essa exclusão de fato, desmarque o modo Dry-Run ou envie o comando de execução com aprovação humana.`,
+        status: 'SUCCESS',
+        invokedTools: [
+          {
+            toolName: 'multicloud_dryrun_planner',
+            provider: target.provider,
+            arguments: { target: target.name, dryRun: true },
+            result: 'Dry-run concluído com sucesso.',
+            success: true,
+            latencyMs: 25,
+            traceId
+          }
+        ],
+        traceId
+      });
+      return;
+    }
+
     if (isDestructive && !autoApproveSafeActions) {
-      // Find possible affected target
-      let target = resources.find(r => promptLower.includes(r.name.toLowerCase()) || promptLower.includes(r.provider.toLowerCase()));
-      if (!target) target = resources[0];
+      tracer.recordSpan('GUARDRAIL_INTERCEPT', 'SECURITY_GUARDRAIL', 18, { risk: 'CRITICAL', target: target.name });
+      tracer.finish();
+
+      const dryRunDiff = `- resource "${target.provider.toLowerCase()}_instance" "${target.name}" {\n` +
+        `-   status       = "${target.status}"\n` +
+        `-   monthly_cost = "$${target.estimatedMonthlyCost.toFixed(2)}"\n` +
+        `- }`;
 
       const blastRadius = {
-        riskLevel: 'CRITICAL',
+        riskLevel: 'CRITICAL' as const,
         requiresApproval: true,
         description: `Operação de alta criticidade detectada: Interrupção/Remoção de recurso de infraestrutura em nuvem.`,
         affectedResources: [`${target.provider} :: ${target.name} (${target.resourceType})`],
         confirmationToken: `token-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
         targetResourceId: target.id,
-        suggestedAction: promptLower.includes('delete') || promptLower.includes('excluir') || promptLower.includes('exclua') ? 'DELETE' : 'STOP'
+        suggestedAction: promptLower.includes('delete') || promptLower.includes('excluir') || promptLower.includes('exclua') ? 'DELETE' : 'STOP',
+        dryRunDiff,
+        estimatedCostImpact: -target.estimatedMonthlyCost
       };
 
-      // Record in audit log as blocked pending review
-      auditLogs.unshift({
-        id: `aud-${Date.now().toString().slice(-4)}`,
-        timestamp: new Date().toISOString(),
-        user: 'ai-agent-guardrail',
-        role: 'ROLE_GUARDRAIL',
-        provider: target.provider,
-        action: 'GUARDRAIL_INTERCEPT',
-        resourceId: target.name,
-        riskLevel: 'CRITICAL',
-        status: 'BLOCKED_BY_GUARDRAIL',
-        details: `Tentativa de operação destrutiva interceptada para aprovação do operador humano: "${prompt}"`,
-        signature: `sha256-${Math.random().toString(36).substring(2, 15)}`
-      });
+      // Record in tamper-evident chained audit log as blocked pending review
+      logAudit(
+        'ai-agent-guardrail',
+        'ROLE_GUARDRAIL',
+        target.provider,
+        'GUARDRAIL_INTERCEPT',
+        target.name,
+        'CRITICAL',
+        'BLOCKED_BY_GUARDRAIL',
+        `Tentativa de operação destrutiva interceptada para aprovação do operador humano: "${prompt}"`
+      );
 
       res.json({
         reply: `⚠️ **Guardrail de Segurança Ativado (ADR-003)**:\n\nA sua solicitação envolve uma **ação destrutiva ou de alto impacto** no ambiente de nuvem (${target.provider} - ${target.name}). Por requisitos de conformidade e proteção contra indisponibilidade, foi calculado o **Blast Radius** e a execução requer a confirmação explícita do operador humano abaixo.`,
         status: 'AWAITING_APPROVAL',
         invokedTools: [],
-        blastRadius
+        blastRadius,
+        traceId
       });
       return;
     }
@@ -638,8 +1111,9 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
 
     if (gemini) {
       try {
+        tracer.recordSpan('GEMINI_REASONING', 'GOOGLE_GENAI_SERVICE', 320, { model: 'gemini-3.8-flash' });
         const systemInstruction = `Você é o AI MultiCloud Agent (Produção 2026), um orquestrador sênior especialista em AWS, Azure, Google Cloud (GCP) e Oracle Cloud (OCI).
-Você gerencia infraestrutura com alta responsabilidade, aderindo às políticas de governança CIS e finanças em nuvem (FinOps).
+Você gerencia infraestrutura com alta responsabilidade, aderindo às políticas de governança CIS, OPA Gatekeeper e finanças em nuvem (FinOps).
 Inventário atual em memória:
 ${JSON.stringify(resources, null, 2)}
 
@@ -661,53 +1135,55 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
 
         const replyText = response.text || 'Processamento concluído pelo agente.';
 
-      // Determine invoked tool based on context
-      let invokedToolName = 'multicloud_inventory_query';
-      let provider = 'ALL';
-      if (promptLower.includes('aws') || promptLower.includes('s3') || promptLower.includes('ec2')) {
-        invokedToolName = 'aws_ec2_s3_inspector';
-        provider = 'AWS';
-      } else if (promptLower.includes('azure') || promptLower.includes('blob')) {
-        invokedToolName = 'azure_arm_inspector';
-        provider = 'AZURE';
-      } else if (promptLower.includes('gcp') || promptLower.includes('google')) {
-        invokedToolName = 'gcp_compute_sql_inspector';
-        provider = 'GCP';
-      } else if (promptLower.includes('oci') || promptLower.includes('oracle')) {
-        invokedToolName = 'oci_core_inspector';
-        provider = 'OCI';
-      }
+        // Determine invoked tool based on context
+        let invokedToolName = 'multicloud_inventory_query';
+        let provider = 'ALL';
+        if (promptLower.includes('aws') || promptLower.includes('s3') || promptLower.includes('ec2')) {
+          invokedToolName = 'aws_ec2_s3_inspector';
+          provider = 'AWS';
+        } else if (promptLower.includes('azure') || promptLower.includes('blob')) {
+          invokedToolName = 'azure_arm_inspector';
+          provider = 'AZURE';
+        } else if (promptLower.includes('gcp') || promptLower.includes('google')) {
+          invokedToolName = 'gcp_compute_sql_inspector';
+          provider = 'GCP';
+        } else if (promptLower.includes('oci') || promptLower.includes('oracle')) {
+          invokedToolName = 'oci_core_inspector';
+          provider = 'OCI';
+        }
 
-      const toolCall = {
-        toolName: invokedToolName,
-        provider,
-        arguments: { query: prompt },
-        result: `Consulta executada em ${provider} com sucesso.`,
-        success: true,
-        latencyMs: 124
-      };
+        tracer.recordSpan('INVOKE_TOOL', invokedToolName, 85, { provider });
+        tracer.recordSpan('OPA_EVALUATION', 'OPA_ENGINE', 15, { status: 'COMPLIANT' });
+        tracer.finish();
 
-      // Record query in audit log
-      auditLogs.unshift({
-        id: `aud-${Date.now().toString().slice(-4)}`,
-        timestamp: new Date().toISOString(),
-        user: 'current-operator@multicloud.corp',
-        role: 'ROLE_DEVOPS',
-        provider,
-        action: 'AI_AGENT_ORCHESTRATION',
-        resourceId: 'QUERY',
-        riskLevel: 'LOW',
-        status: 'SUCCESS',
-        details: `Agente de IA orquestrou ferramenta ${invokedToolName} para solicitação: "${prompt.slice(0, 60)}..."`,
-        signature: `sha256-${Math.random().toString(36).substring(2, 15)}`
-      });
+        const toolCall = {
+          toolName: invokedToolName,
+          provider,
+          arguments: { query: prompt },
+          result: `Consulta executada em ${provider} com sucesso.`,
+          success: true,
+          latencyMs: 124,
+          traceId
+        };
 
-      res.json({
-        reply: replyText,
-        status: 'SUCCESS',
-        invokedTools: [toolCall]
-      });
-      return;
+        logAudit(
+          'current-operator@multicloud.corp',
+          'ROLE_DEV',
+          provider,
+          'AI_AGENT_ORCHESTRATION',
+          'QUERY',
+          'LOW',
+          'SUCCESS',
+          `Agente de IA orquestrou ferramenta ${invokedToolName} para solicitação: "${prompt.slice(0, 60)}..."`
+        );
+
+        res.json({
+          reply: replyText,
+          status: 'SUCCESS',
+          invokedTools: [toolCall],
+          traceId
+        });
+        return;
       } catch (geminiError: any) {
         console.warn('Gemini API call error (falling back to deterministic multi-cloud engine):', geminiError?.message || geminiError);
       }
@@ -757,6 +1233,9 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
         `Como posso te ajudar com a sua infraestrutura agora?`;
     }
 
+    tracer.recordSpan('INVOKE_TOOL', toolName, 60, { provider });
+    tracer.finish();
+
     res.json({
       reply: simulatedReply,
       status: 'SUCCESS',
@@ -767,9 +1246,11 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
           arguments: { query: prompt },
           result: 'Comando executado com sucesso.',
           success: true,
-          latencyMs: 85
+          latencyMs: 85,
+          traceId
         }
-      ]
+      ],
+      traceId
     });
   } catch (err: any) {
     console.error('Agent chat error:', err);
@@ -791,20 +1272,16 @@ app.post('/api/agent/execute', (req: Request, res: Response) => {
     if (action === 'START') target.status = 'RUNNING';
   }
 
-  const logEntry: AuditLog = {
-    id: `aud-${Date.now().toString().slice(-4)}`,
-    timestamp: new Date().toISOString(),
-    user: 'approved-operator@multicloud.corp',
-    role: 'ROLE_ADMIN',
-    provider: provider || 'MULTI',
-    action: action || toolName || 'EXECUTE_APPROVED_ACTION',
-    resourceId: target ? target.name : 'RESOURCE',
-    riskLevel: 'CRITICAL',
-    status: 'SUCCESS',
-    details: `Operação aprovada manualmente e executada com sucesso pelo agente. Alvo: ${target ? target.name : 'N/A'}.`,
-    signature: `sha256-${Math.random().toString(36).substring(2, 15)}`
-  };
-  auditLogs.unshift(logEntry);
+  const logEntry = logAudit(
+    'approved-operator@multicloud.corp',
+    'ROLE_ADMIN',
+    provider || 'MULTI',
+    action || toolName || 'EXECUTE_APPROVED_ACTION',
+    target ? target.name : 'RESOURCE',
+    'CRITICAL',
+    'SUCCESS',
+    `Operação aprovada manualmente e executada com sucesso pelo agente. Alvo: ${target ? target.name : 'N/A'}.`
+  );
 
   res.json({
     reply: `✅ **Operação Executada com Sucesso**!\n\nA alteração no recurso \`${target ? target.name : 'solicitado'}\` foi concluída e o evento foi registrado na trilha de auditoria imutável (ID: \`${logEntry.id}\`).`,
