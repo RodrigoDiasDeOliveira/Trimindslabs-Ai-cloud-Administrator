@@ -1,0 +1,6 @@
+{
+  "name": "AI MultiCloud Agent",
+  "description": "Enterprise AI Multi-Cloud Infrastructure Orchestrator supporting AWS, Azure, Google Cloud, and Oracle Cloud with automated actions, governance, and audit logging.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

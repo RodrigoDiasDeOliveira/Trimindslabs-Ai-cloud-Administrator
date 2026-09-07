@@ -1,0 +1,41 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: ai-multicloud-agent-backend
+  profiles:
+    active: dev
+
+multicloud:
+  gemini:
+    model: gemini-3.8-flash
+    api-key: ${GEMINI_API_KEY:}
+  aws:
+    access-key-id: ${AWS_ACCESS_KEY_ID:}
+    secret-access-key: ${AWS_SECRET_ACCESS_KEY:}
+    region: ${AWS_REGION:us-east-1}
+  azure:
+    tenant-id: ${AZURE_TENANT_ID:}
+    client-id: ${AZURE_CLIENT_ID:}
+    client-secret: ${AZURE_CLIENT_SECRET:}
+    subscription-id: ${AZURE_SUBSCRIPTION_ID:}
+  gcp:
+    project-id: ${GCP_PROJECT_ID:}
+    credentials-path: ${GCP_CREDENTIALS_PATH:}
+  oracle:
+    tenancy-id: ${OCI_TENANCY_ID:}
+    user-id: ${OCI_USER_ID:}
+    fingerprint: ${OCI_FINGERPRINT:}
+    region: ${OCI_REGION:sa-saopaulo-1}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
