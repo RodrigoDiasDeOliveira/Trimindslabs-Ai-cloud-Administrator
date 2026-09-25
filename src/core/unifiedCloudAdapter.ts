@@ -99,19 +99,15 @@ export class UnifiedCloudService {
     try {
       return await breaker.execute(async () => {
         return await retryWithTenacity(async () => {
-          // Simulate or execute lightweight probe call
-          await new Promise(r => setTimeout(r, Math.floor(Math.random() * 25) + 30));
-          const latency = Date.now() - startTime;
-
           return {
             provider: prov,
             probeType: target.type,
             targetEndpoint: target.endpoint,
-            statusCode: 200,
-            success: true,
+            statusCode: 503,
+            success: false,
             latencyMs: latency,
             checkedAt: new Date().toISOString(),
-            message: `Probe ${target.type} respondeu com sucesso (HTTP 200). Credenciais válidas.`,
+            message: `NOT_CONFIGURED: no real provider adapter is wired for ${prov}. No connectivity result was simulated.`,
             circuitBreakerState: breaker.getState()
           };
         }, { maxAttempts: 2, initialDelayMs: 50 });
