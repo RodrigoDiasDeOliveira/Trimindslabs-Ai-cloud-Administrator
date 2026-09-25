@@ -1,4 +1,5 @@
 import { CloudProvider, CloudResource, ResourceCategory } from '../types';
+import { CloudProvider, CloudResource } from '../types';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import { DescribeInstancesCommand, EC2Client } from '@aws-sdk/client-ec2';
 import { CircuitBreaker, retryWithTenacity } from './resilience';
@@ -101,7 +102,7 @@ export class UnifiedCloudService {
     const startTime = Date.now();
 
     const probeEndpoints: Record<string, { type: string; endpoint: string }> = {
-      AWS: { type: 'sts:GetCallerIdentity / s3:ListBuckets(maxKeys=1)', endpoint: 'https://sts.us-east-1.amazonaws.com' },
+      AWS: { type: 'sts:GetCallerIdentity', endpoint: 'AWS STS' },
       AZURE: { type: 'arm:subscriptions/resourceGroups', endpoint: 'https://management.azure.com/subscriptions' },
       GCP: { type: 'cloudresourcemanager.projects.get', endpoint: 'https://cloudresourcemanager.googleapis.com/v1' },
       OCI: { type: 'identity.getUser / tenancy.inspect', endpoint: 'https://identity.sa-saopaulo-1.oraclecloud.com' }
@@ -147,7 +148,7 @@ export class UnifiedCloudService {
         provider: prov,
         probeType: target.type,
         targetEndpoint: target.endpoint,
-        statusCode: 503,
+        statusCode: err?.$metadata?.httpStatusCode || 503,
         success: false,
         latencyMs: latency,
         checkedAt: new Date().toISOString(),
