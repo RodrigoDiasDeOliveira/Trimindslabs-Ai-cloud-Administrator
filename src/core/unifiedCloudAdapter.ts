@@ -216,8 +216,7 @@ export class UnifiedCloudService {
     try {
       const created = await breaker.execute(async () => {
         return await retryWithTenacity(async () => {
-          existingInventory.push(resourceCandidate);
-          return resourceCandidate;
+          throw new Error('REAL_PROVIDER_ADAPTER_NOT_CONFIGURED');
         }, { maxAttempts: 2 });
       });
 
@@ -230,7 +229,7 @@ export class UnifiedCloudService {
         executionPlan: plan,
         estimatedCostDelta: estimatedCost,
         opaScore: opaResult.complianceScore,
-        message: `Instância de computação ${sanitizedName} provisionada com sucesso em ${prov}.`,
+        message: `REAL_PROVIDER_ADAPTER_NOT_CONFIGURED: no VM was created in ${prov}.`,
         latencyMs: Date.now() - startTime
       };
     } catch (err: any) {
