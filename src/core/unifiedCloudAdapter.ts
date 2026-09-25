@@ -1,5 +1,6 @@
 import { CloudProvider, CloudResource, ResourceCategory } from '../types';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
+import { DescribeInstancesCommand, EC2Client } from '@aws-sdk/client-ec2';
 import { CircuitBreaker, retryWithTenacity } from './resilience';
 import { OpaPolicyEngine } from './opaEngine';
 import { InputValidator } from './inputValidator';
@@ -46,6 +47,17 @@ export interface ExecutionResult<T = any> {
   opaScore?: number;
   message: string;
   latencyMs: number;
+}
+
+export interface AwsInstanceSummary {
+  instanceId: string;
+  name?: string;
+  state: string;
+  instanceType?: string;
+  availabilityZone?: string;
+  privateIpAddress?: string;
+  publicIpAddress?: string;
+  tags: Record<string, string>;
 }
 
 export interface ProbeResult {
@@ -141,6 +153,62 @@ export class UnifiedCloudService {
         checkedAt: new Date().toISOString(),
         message: `Falha no probe de saúde: ${err.message}`,
         circuitBreakerState: breaker.getState()
+      };
+    }
+  }
+
+  /**
+   * Read-only AWS EC2 inventory discovery.
+   * No local inventory is mutated and no instance lifecycle operation is performed.
+   */
+  static async describeAwsInstances(region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1'): Promise<ExecutionResult<AwsInstanceSummary[]>> {
+    const startTime = Date.now();
+    const prov = 'AWS';
+    const breaker = this.getBreaker(prov);
+
+    try {
+      const instances = await breaker.execute(async () => {
+        const client = new EC2Client({ region });
+        const response = await client.send(new DescribeInstancesCommand({}));
+        return (response.Reservations ?? []).flatMap(reservation =>
+          (reservation.Instances ?? []).map(instance => {
+            const tags = Object.fromEntries(
+              (instance.Tags ?? [])
+                .filter(tag => tag.Key)
+                .map(tag => [tag.Key as string, tag.Value ?? ''])
+            );
+            return {
+              instanceId: instance.InstanceId ?? 'UNKNOWN',
+              name: tags.Name,
+              state: instance.State?.Name ?? 'unknown',
+              instanceType: instance.InstanceType,
+              availabilityZone: instance.Placement?.AvailabilityZone,
+              privateIpAddress: instance.PrivateIpAddress,
+              publicIpAddress: instance.PublicIpAddress,
+              tags
+            } satisfies AwsInstanceSummary;
+          })
+        );
+      });
+
+      return {
+        success: true,
+        dryRun: false,
+        provider: prov,
+        operation: 'DESCRIBE_INSTANCES',
+        result: instances,
+        message: `AWS EC2 inventory read successfully: ${instances.length} instance(s) returned from ${region}.`,
+        latencyMs: Date.now() - startTime
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        dryRun: false,
+        provider: prov,
+        operation: 'DESCRIBE_INSTANCES',
+        result: [],
+        message: `AWS EC2 inventory probe failed: ${err?.message || String(err)}`,
+        latencyMs: Date.now() - startTime
       };
     }
   }
