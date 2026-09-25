@@ -1,4 +1,6 @@
-import { CloudProvider, CloudResource, ResourceCategory } from '../types';
+import { CloudProvider, CloudResource } from '../types';
+import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
+import { DescribeInstancesCommand, EC2Client } from '@aws-sdk/client-ec2';
 import { CircuitBreaker, retryWithTenacity } from './resilience';
 import { OpaPolicyEngine } from './opaEngine';
 import { InputValidator } from './inputValidator';
@@ -47,6 +49,17 @@ export interface ExecutionResult<T = any> {
   latencyMs: number;
 }
 
+export interface AwsInstanceSummary {
+  instanceId: string;
+  name?: string;
+  state: string;
+  instanceType?: string;
+  availabilityZone?: string;
+  privateIpAddress?: string;
+  publicIpAddress?: string;
+  tags: Record<string, string>;
+}
+
 export interface ProbeResult {
   provider: CloudProvider;
   probeType: string;
@@ -88,7 +101,7 @@ export class UnifiedCloudService {
     const startTime = Date.now();
 
     const probeEndpoints: Record<string, { type: string; endpoint: string }> = {
-      AWS: { type: 'sts:GetCallerIdentity / s3:ListBuckets(maxKeys=1)', endpoint: 'https://sts.us-east-1.amazonaws.com' },
+      AWS: { type: 'sts:GetCallerIdentity', endpoint: 'AWS STS' },
       AZURE: { type: 'arm:subscriptions/resourceGroups', endpoint: 'https://management.azure.com/subscriptions' },
       GCP: { type: 'cloudresourcemanager.projects.get', endpoint: 'https://cloudresourcemanager.googleapis.com/v1' },
       OCI: { type: 'identity.getUser / tenancy.inspect', endpoint: 'https://identity.sa-saopaulo-1.oraclecloud.com' }
@@ -99,19 +112,31 @@ export class UnifiedCloudService {
     try {
       return await breaker.execute(async () => {
         return await retryWithTenacity(async () => {
-          // Simulate or execute lightweight probe call
-          await new Promise(r => setTimeout(r, Math.floor(Math.random() * 25) + 30));
-          const latency = Date.now() - startTime;
+          if (prov !== 'AWS') {
+            return {
+              provider: prov,
+              probeType: target.type,
+              targetEndpoint: target.endpoint,
+              statusCode: 503,
+              success: false,
+              latencyMs: Date.now() - startTime,
+            checkedAt: new Date().toISOString(),
+            message: `NOT_CONFIGURED: no real provider adapter is wired for ${prov}. No connectivity result was simulated.`,
+              circuitBreakerState: breaker.getState()
+            };
+          }
 
+          const client = new STSClient({});
+          const response = await client.send(new GetCallerIdentityCommand({}));
           return {
             provider: prov,
-            probeType: target.type,
-            targetEndpoint: target.endpoint,
+            probeType: 'sts:GetCallerIdentity',
+            targetEndpoint: 'AWS STS',
             statusCode: 200,
             success: true,
-            latencyMs: latency,
+            latencyMs: Date.now() - startTime,
             checkedAt: new Date().toISOString(),
-            message: `Probe ${target.type} respondeu com sucesso (HTTP 200). Credenciais válidas.`,
+            message: `AWS identity verified${response.Account ? ` for account ${response.Account}` : ''}.`,
             circuitBreakerState: breaker.getState()
           };
         }, { maxAttempts: 2, initialDelayMs: 50 });
@@ -122,12 +147,68 @@ export class UnifiedCloudService {
         provider: prov,
         probeType: target.type,
         targetEndpoint: target.endpoint,
-        statusCode: 503,
+        statusCode: err?.$metadata?.httpStatusCode || 503,
         success: false,
         latencyMs: latency,
         checkedAt: new Date().toISOString(),
         message: `Falha no probe de saúde: ${err.message}`,
         circuitBreakerState: breaker.getState()
+      };
+    }
+  }
+
+  /**
+   * Read-only AWS EC2 inventory discovery.
+   * No local inventory is mutated and no instance lifecycle operation is performed.
+   */
+  static async describeAwsInstances(region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1'): Promise<ExecutionResult<AwsInstanceSummary[]>> {
+    const startTime = Date.now();
+    const prov = 'AWS';
+    const breaker = this.getBreaker(prov);
+
+    try {
+      const instances = await breaker.execute(async () => {
+        const client = new EC2Client({ region });
+        const response = await client.send(new DescribeInstancesCommand({}));
+        return (response.Reservations ?? []).flatMap(reservation =>
+          (reservation.Instances ?? []).map(instance => {
+            const tags = Object.fromEntries(
+              (instance.Tags ?? [])
+                .filter(tag => tag.Key)
+                .map(tag => [tag.Key as string, tag.Value ?? ''])
+            );
+            return {
+              instanceId: instance.InstanceId ?? 'UNKNOWN',
+              name: tags.Name,
+              state: instance.State?.Name ?? 'unknown',
+              instanceType: instance.InstanceType,
+              availabilityZone: instance.Placement?.AvailabilityZone,
+              privateIpAddress: instance.PrivateIpAddress,
+              publicIpAddress: instance.PublicIpAddress,
+              tags
+            } satisfies AwsInstanceSummary;
+          })
+        );
+      });
+
+      return {
+        success: true,
+        dryRun: false,
+        provider: prov,
+        operation: 'DESCRIBE_INSTANCES',
+        result: instances,
+        message: `AWS EC2 inventory read successfully: ${instances.length} instance(s) returned from ${region}.`,
+        latencyMs: Date.now() - startTime
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        dryRun: false,
+        provider: prov,
+        operation: 'DESCRIBE_INSTANCES',
+        result: [],
+        message: `AWS EC2 inventory probe failed: ${err?.message || String(err)}`,
+        latencyMs: Date.now() - startTime
       };
     }
   }
@@ -220,21 +301,19 @@ export class UnifiedCloudService {
     try {
       const created = await breaker.execute(async () => {
         return await retryWithTenacity(async () => {
-          existingInventory.push(resourceCandidate);
-          return resourceCandidate;
+          throw new Error('REAL_PROVIDER_ADAPTER_NOT_CONFIGURED');
         }, { maxAttempts: 2 });
       });
 
       return {
-        success: true,
+        success: false,
         dryRun: false,
         provider: prov,
         operation: 'CREATE_VM',
-        result: created,
         executionPlan: plan,
         estimatedCostDelta: estimatedCost,
         opaScore: opaResult.complianceScore,
-        message: `Instância de computação ${sanitizedName} provisionada com sucesso em ${prov}.`,
+        message: `REAL_PROVIDER_ADAPTER_NOT_CONFIGURED: no VM was created in ${prov}.`,
         latencyMs: Date.now() - startTime
       };
     } catch (err: any) {
@@ -251,6 +330,10 @@ export class UnifiedCloudService {
 
   /**
    * Unified VM / Resource Termination (Destructive Operation with Confirmation & Dry-Run)
+   *
+   * Destructive provider execution remains intentionally unavailable until a real
+   * provider lifecycle adapter is implemented. The inventory is never mutated to
+   * represent a cloud-side termination.
    */
   static async terminateVm(
     provider: CloudProvider,
@@ -260,10 +343,9 @@ export class UnifiedCloudService {
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const prov = provider.toUpperCase();
-    const breaker = this.getBreaker(prov);
+    const target = existingInventory.find(r => r.id === resourceId || r.name === resourceId);
 
-    const targetIdx = existingInventory.findIndex(r => r.id === resourceId || r.name === resourceId);
-    if (targetIdx === -1) {
+    if (!target) {
       return {
         success: false,
         dryRun: !!options.dryRun,
@@ -274,14 +356,12 @@ export class UnifiedCloudService {
       };
     }
 
-    const target = existingInventory[targetIdx];
-
-    const plan = `------------------------------------------------------------\n` +
-      `[PLAN: DESTRUCTIVE ACTION] ${options.dryRun ? '(DRY-RUN MODE - NENHUM RECURSO SERÁ EXCLUÍDO)' : '(EXECUÇÃO DESTRUTIVA)'}\n` +
-      `- Provedor: ${prov}\n` +
-      `- Recurso a Destruir: ${target.name} (${target.id})\n` +
-      `- Tipo: ${target.resourceType} | Região: ${target.region}\n` +
-      `- Redução de Custo Estimada: -$${target.estimatedMonthlyCost.toFixed(2)} USD/mês\n` +
+    const plan = `------------------------------------------------------------\\n` +
+      `[PLAN: DESTRUCTIVE ACTION] ${options.dryRun ? '(DRY-RUN MODE - NENHUM RECURSO SERÁ EXCLUÍDO)' : '(EXECUÇÃO DESTRUTIVA)'}\\n` +
+      `- Provedor: ${prov}\\n` +
+      `- Recurso a Destruir: ${target.name} (${target.id})\\n` +
+      `- Tipo: ${target.resourceType} | Região: ${target.region}\\n` +
+      `- Redução de Custo Estimada: -$${target.estimatedMonthlyCost.toFixed(2)} USD/mês\\n` +
       `------------------------------------------------------------`;
 
     if (options.dryRun) {
@@ -292,35 +372,20 @@ export class UnifiedCloudService {
         operation: 'TERMINATE_VM',
         executionPlan: plan,
         estimatedCostDelta: -target.estimatedMonthlyCost,
-        message: `Plano de exclusão simulado via dry-run com sucesso.`,
+        message: 'Dry-run concluído: nenhum recurso foi alterado.',
         latencyMs: Date.now() - startTime
       };
     }
 
-    try {
-      await breaker.execute(async () => {
-        existingInventory.splice(targetIdx, 1);
-      });
-
-      return {
-        success: true,
-        dryRun: false,
-        provider: prov,
-        operation: 'TERMINATE_VM',
-        executionPlan: plan,
-        estimatedCostDelta: -target.estimatedMonthlyCost,
-        message: `Recurso ${target.name} terminado e desprovisionado com sucesso de ${prov}.`,
-        latencyMs: Date.now() - startTime
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        dryRun: false,
-        provider: prov,
-        operation: 'TERMINATE_VM',
-        message: `Falha na destruição do recurso: ${err.message}`,
-        latencyMs: Date.now() - startTime
-      };
-    }
+    return {
+      success: false,
+      dryRun: false,
+      provider: prov,
+      operation: 'TERMINATE_VM',
+      executionPlan: plan,
+      estimatedCostDelta: 0,
+      message: `NOT_IMPLEMENTED: nenhum adapter real de lifecycle está configurado para ${prov}. Nenhum recurso foi alterado.`,
+      latencyMs: Date.now() - startTime
+    };
   }
 }

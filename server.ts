@@ -19,125 +19,7 @@ const PORT = 3000;
 app.use(express.json());
 
 // In-Memory Multi-Cloud Resource Inventory
-let resources: CloudResource[] = [
-  {
-    id: 'res-aws-01',
-    name: 'prod-api-cluster-node-01',
-    provider: 'AWS',
-    category: 'COMPUTE',
-    resourceType: 'EC2 t3.large',
-    status: 'RUNNING',
-    region: 'us-east-1',
-    estimatedMonthlyCost: 67.20,
-    tags: { Environment: 'Production', Owner: 'CoreOps', Workload: 'API-Gateway' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: 'i-0498a87b654c3210e'
-  },
-  {
-    id: 'res-aws-02',
-    name: 'enterprise-cold-backups-2026',
-    provider: 'AWS',
-    category: 'STORAGE',
-    resourceType: 'S3 Bucket (Glacier)',
-    status: 'RUNNING',
-    region: 'us-east-1',
-    estimatedMonthlyCost: 24.50,
-    tags: { Compliance: 'SOC2', Retention: '7-Years' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: 'arn:aws:s3:::enterprise-cold-backups-2026'
-  },
-  {
-    id: 'res-aws-03',
-    name: 'aurora-pg-primary',
-    provider: 'AWS',
-    category: 'DATABASE',
-    resourceType: 'RDS Aurora Serverless v2',
-    status: 'RUNNING',
-    region: 'us-east-1',
-    estimatedMonthlyCost: 198.40,
-    tags: { Environment: 'Production', Encryption: 'KMS-Enabled' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: 'arn:aws:rds:us-east-1:123456789012:cluster:aurora-pg-primary'
-  },
-  {
-    id: 'res-az-01',
-    name: 'vm-fintech-gateway',
-    provider: 'AZURE',
-    category: 'COMPUTE',
-    resourceType: 'Virtual Machine Standard_D4s_v5',
-    status: 'RUNNING',
-    region: 'eastus',
-    estimatedMonthlyCost: 142.35,
-    tags: { Department: 'Finance', SLA: '99.99', CostCenter: 'FinTech' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: '/subscriptions/sub-az-prod/resourceGroups/rg-fintech/vms/vm-fintech-gateway'
-  },
-  {
-    id: 'res-az-02',
-    name: 'blob-customer-statements',
-    provider: 'AZURE',
-    category: 'STORAGE',
-    resourceType: 'Azure Blob Storage (Hot)',
-    status: 'RUNNING',
-    region: 'eastus',
-    estimatedMonthlyCost: 56.10,
-    tags: { Tier: 'Hot', PublicAccess: 'Disabled' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: 'https://statementsfintech.blob.core.windows.net/statements'
-  },
-  {
-    id: 'res-gcp-01',
-    name: 'gcp-pg-master-db',
-    provider: 'GCP',
-    category: 'DATABASE',
-    resourceType: 'Cloud SQL PostgreSQL 16 (HA)',
-    status: 'RUNNING',
-    region: 'us-central1',
-    estimatedMonthlyCost: 189.00,
-    tags: { DataClassification: 'Confidential', Backup: 'Automated-Daily' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: 'projects/multicloud-prod/instances/gcp-pg-master-db'
-  },
-  {
-    id: 'res-gcp-02',
-    name: 'k8s-ai-cluster-gke',
-    provider: 'GCP',
-    category: 'COMPUTE',
-    resourceType: 'GKE Autopilot v1.30',
-    status: 'RUNNING',
-    region: 'us-central1',
-    estimatedMonthlyCost: 245.00,
-    tags: { Tier: 'Microservices', Autoscaling: 'Enabled' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: 'projects/multicloud-prod/locations/us-central1/clusters/ai-cluster'
-  },
-  {
-    id: 'res-oci-01',
-    name: 'oci-ai-inference-worker',
-    provider: 'OCI',
-    category: 'COMPUTE',
-    resourceType: 'VM.Standard.A1.Flex (4 OCPU, 24GB)',
-    status: 'RUNNING',
-    region: 'sa-saopaulo-1',
-    estimatedMonthlyCost: 48.00,
-    tags: { Project: 'LLM-Worker', Architecture: 'ARM64' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: 'ocid1.instance.oc1.sa-saopaulo-1.ab32fakeocid99214'
-  },
-  {
-    id: 'res-oci-02',
-    name: 'oci-autonomous-analytics-db',
-    provider: 'OCI',
-    category: 'DATABASE',
-    resourceType: 'Autonomous Transaction Processing (1 OCPU)',
-    status: 'RUNNING',
-    region: 'sa-saopaulo-1',
-    estimatedMonthlyCost: 168.00,
-    tags: { Workload: 'Analytics-ETL', Autoscaling: 'Enabled' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: 'ocid1.autonomousdatabase.oc1.sa-saopaulo-1.an23fakeocid772'
-  }
-];
+let resources: CloudResource[] = [];
 
 const initialLog1 = AuditCryptoChain.createEntry(undefined, {
   user: 'rodrigo.ops@multicloud.corp',
@@ -276,22 +158,24 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'UP',
     timestamp: new Date().toISOString(),
-    engine: 'Express+Gemini Enterprise Multi-Cloud Engine',
-    springBootReady: true,
-    version: '1.0.0-PROD'
+    engine: 'AI MultiCloud Administrator',
+    runtime: 'EXPRESS',
+    springBootReady: false,
+    version: '1.0.0'
   });
 });
 
 app.get('/api/actuator/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'UP',
+  res.status(503).json({
+    status: 'DEGRADED',
     components: {
-      awsAdapter: { status: 'UP', latencyMs: 42 },
-      azureAdapter: { status: 'UP', latencyMs: 56 },
-      gcpAdapter: { status: 'UP', latencyMs: 38 },
-      ociAdapter: { status: 'UP', latencyMs: 49 },
-      aiAgentCore: { status: 'UP', model: 'gemini-3.8-flash' }
-    }
+      awsAdapter: { status: 'NOT_CONFIGURED' },
+      azureAdapter: { status: 'NOT_CONFIGURED' },
+      gcpAdapter: { status: 'NOT_CONFIGURED' },
+      ociAdapter: { status: 'NOT_CONFIGURED' },
+      aiAgentCore: { status: process.env.GEMINI_API_KEY ? 'CONFIGURED' : 'NOT_CONFIGURED' }
+    },
+    message: 'No provider health is reported without a real connectivity probe.'
   });
 });
 
@@ -302,38 +186,38 @@ app.get('/api/actuator/health', (req: Request, res: Response) => {
 const initialProviders = [
   {
     provider: 'AWS',
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'us-east-1',
     activeResourcesCount: 3,
-    latencyMs: 42,
-    credentialsValid: true,
+    latencyMs: 0,
+    credentialsValid: false,
     availableServices: ['EC2', 'S3', 'RDS Aurora', 'VPC', 'IAM', 'Lambda', 'KMS']
   },
   {
     provider: 'AZURE',
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'eastus',
     activeResourcesCount: 2,
-    latencyMs: 56,
-    credentialsValid: true,
+    latencyMs: 0,
+    credentialsValid: false,
     availableServices: ['Virtual Machines', 'Blob Storage', 'Azure SQL', 'VNet', 'Entra ID']
   },
   {
     provider: 'GCP',
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'us-central1',
     activeResourcesCount: 2,
-    latencyMs: 38,
-    credentialsValid: true,
+    latencyMs: 0,
+    credentialsValid: false,
     availableServices: ['Compute Engine', 'Cloud Storage', 'Cloud SQL', 'GKE Autopilot', 'Cloud KMS']
   },
   {
     provider: 'OCI',
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'sa-saopaulo-1',
     activeResourcesCount: 2,
-    latencyMs: 49,
-    credentialsValid: true,
+    latencyMs: 0,
+    credentialsValid: false,
     availableServices: ['Compute ARM64', 'Object Storage', 'Autonomous DB', 'VCN', 'Vault']
   }
 ];
@@ -505,6 +389,33 @@ app.get('/api/providers/status', (req: Request, res: Response) => {
   res.json(updated);
 });
 
+// Execute a real, read-only provider connectivity probe.
+app.get('/api/providers/:provider/probe', async (req: Request, res: Response) => {
+  const provider = String(req.params.provider).toUpperCase();
+  try {
+    const probe = await UnifiedCloudService.performHealthProbe(provider);
+    const providerIdx = providersList.findIndex(p => p.provider === provider);
+    if (providerIdx >= 0) {
+      providersList[providerIdx] = {
+        ...providersList[providerIdx], status: probe.success ? 'CONNECTED' : 'DEGRADED',
+        latencyMs: probe.latencyMs, credentialsValid: probe.success,
+        circuitBreakerState: probe.circuitBreakerState,
+        lastProbeCheck: { probeType: probe.probeType, targetEndpoint: probe.targetEndpoint, statusCode: probe.statusCode, success: probe.success, latencyMs: probe.latencyMs, checkedAt: probe.checkedAt }
+      };
+    }
+    res.status(probe.success ? 200 : 503).json(probe);
+  } catch (err: any) {
+    res.status(500).json({ provider, status: 'FAILED', message: err?.message || String(err) });
+  }
+});
+
+// Read-only AWS EC2 inventory discovery.
+app.get('/api/providers/AWS/instances', async (req: Request, res: Response) => {
+  const region = typeof req.query.region === 'string' && req.query.region.trim() ? req.query.region.trim() : undefined;
+  const result = await UnifiedCloudService.describeAwsInstances(region);
+  res.status(result.success ? 200 : 503).json(result);
+});
+
 // Add New Cloud Provider with Custom Resources & Services
 app.post('/api/providers/add', (req: Request, res: Response) => {
   const { provider, defaultRegion, credentials, selectedServices, initialResources } = req.body;
@@ -522,11 +433,11 @@ app.post('/api/providers/add', (req: Request, res: Response) => {
 
   const newProviderObj = {
     provider: provUpper,
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: defaultRegion || 'us-east-1',
     activeResourcesCount: 0,
     latencyMs: Math.floor(Math.random() * 25) + 35,
-    credentialsValid: true,
+    credentialsValid: false,
     availableServices: services
   };
 
@@ -1304,117 +1215,33 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
       });
     }
 
-    // Fallback: Intelligent Simulated Multi-Cloud Engine
-    let simulatedReply = '';
-    let toolName = 'multicloud_query';
-    let provider = 'ALL';
-
-    if (promptLower.includes('s3') || (promptLower.includes('bucket') && promptLower.includes('aws'))) {
-      provider = 'AWS';
-      toolName = 'aws_s3_list_buckets';
-      const s3Buckets = resources.filter(r => r.provider === 'AWS' && r.category === 'STORAGE');
-      simulatedReply = `### 📦 Relatório de Buckets AWS S3\n\nForam localizados **${s3Buckets.length} bucket(s)** na região \`us-east-1\`:\n\n` +
-        s3Buckets.map(b => `- **Nome:** \`${b.name}\`\n  - **Tipo:** ${b.resourceType}\n  - **Custo Mensal:** $${b.estimatedMonthlyCost.toFixed(2)}\n  - **Conformidade:** ✅ ${b.securityPosture} (Criptografia KMS ativa, sem acesso público)`).join('\n\n');
-    } else if (promptLower.includes('vm') || promptLower.includes('instância') || promptLower.includes('compute') || promptLower.includes('ec2')) {
-      const vms = resources.filter(r => r.category === 'COMPUTE');
-      toolName = 'multicloud_list_instances';
-      simulatedReply = `### 🖥️ Instâncias de Computação Multi-Cloud Ativas\n\n` +
-        `Total de máquinas em execução: **${vms.length}**\n\n` +
-        vms.map(v => `| Provedor | Nome | Tipo | Região | Status | Custo |\n|---|---|---|---|---|---|\n| **${v.provider}** | \`${v.name}\` | ${v.resourceType} | ${v.region} | 🟢 ${v.status} | $${v.estimatedMonthlyCost.toFixed(2)}/mês |`).join('\n') +
-        `\n\n*Todas as instâncias estão com os agentes de telemetria operacionais e sem vulnerabilidades críticas detectadas.*`;
-    } else if (promptLower.includes('banco') || promptLower.includes('database') || promptLower.includes('sql')) {
-      const dbs = resources.filter(r => r.category === 'DATABASE');
-      toolName = 'multicloud_list_databases';
-      simulatedReply = `### 🗄️ Bancos de Dados Gerenciados Multi-Cloud\n\n` +
-        `Identificados **${dbs.length} clusters de banco de dados** em produção:\n\n` +
-        dbs.map(d => `- **${d.provider}** :: \`${d.name}\` (${d.resourceType})\n  - **Região:** ${d.region}\n  - **Custo:** $${d.estimatedMonthlyCost.toFixed(2)}/mês\n  - **Segurança:** Backups diários automatizados e conexões TLS 1.3 obrigatórias.`).join('\n\n');
-    } else if (promptLower.includes('custo') || promptLower.includes('finops') || promptLower.includes('valor')) {
-      const total = resources.reduce((acc, r) => acc + r.estimatedMonthlyCost, 0);
-      toolName = 'finops_cost_analysis';
-      simulatedReply = `### 💰 Análise de Custos Multi-Cloud (FinOps)\n\n` +
-        `- **Previsão Total Mensal:** **$${total.toFixed(2)} USD**\n` +
-        `- **AWS:** $${resources.filter(r => r.provider === 'AWS').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2)}\n` +
-        `- **GCP:** $${resources.filter(r => r.provider === 'GCP').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2)}\n` +
-        `- **Azure:** $${resources.filter(r => r.provider === 'AZURE').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2)}\n` +
-        `- **OCI:** $${resources.filter(r => r.provider === 'OCI').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2)}\n\n` +
-        `💡 **Recomendação:** Há uma oportunidade de migrar instâncias computacionais pontuais para Savings Plans de 1 ano, gerando uma economia de até **$24.80/mês**.`;
-    } else {
-      simulatedReply = `Olá! Sou o **AI MultiCloud Agent** (Pronto para Produção). Posso executar tarefas operacionais e de governança nos 4 provedores de nuvem:\n\n` +
-        `- **AWS**: Listar/Criar instâncias EC2, inspecionar S3 e clusters RDS Aurora.\n` +
-        `- **Azure**: Auditar Resource Groups, gerenciar VMs e Blob Storage.\n` +
-        `- **GCP**: Supervisionar Cloud SQL, Compute Engine e clusters GKE Autopilot.\n` +
-        `- **OCI (Oracle)**: Orquestrar instâncias ARM64 e Autonomous Databases.\n` +
-        `- **Segurança & FinOps**: Calcular Blast Radius de comandos e auditar conformidade.\n\n` +
-        `Como posso te ajudar com a sua infraestrutura agora?`;
-    }
-
-    tracer.recordSpan('INVOKE_TOOL', toolName, 60, { provider });
+    // No simulated provider fallback.
+    tracer.recordSpan('NO_REAL_PROVIDER_EXECUTION', 'MULTI_CLOUD_ADAPTER', 0, { status: 'NOT_CONFIGURED' });
     tracer.finish();
-
-    res.json({
-      reply: simulatedReply,
-      status: 'SUCCESS',
-      invokedTools: [
-        {
-          toolName,
-          provider,
-          arguments: { query: prompt },
-          result: 'Comando executado com sucesso.',
-          success: true,
-          latencyMs: 85,
-          traceId
-        }
-      ],
+    res.status(503).json({
+      reply: 'Nenhuma operação foi executada em um provedor de nuvem real. Configure um adapter/provider antes de executar esta solicitação.',
+      status: 'NOT_CONFIGURED',
+      invokedTools: [],
       traceId
     });
-  } catch (err: any) {
-    console.error('Agent chat error:', err);
-    res.status(500).json({ error: err.message || 'Falha ao processar agente' });
   }
-});
 
-// Direct Tool Execution after Approval
+  // Direct Tool Execution after Approval
 app.post('/api/agent/execute', (req: Request, res: Response) => {
   const { toolName, provider, parameters, resourceId, action } = req.body;
-
-  let target = resources.find(r => r.id === resourceId);
-  if (!target && resourceId) {
-    target = resources.find(r => r.name === resourceId);
-  }
-
-  if (target && action) {
-    if (action === 'STOP') target.status = 'STOPPED';
-    if (action === 'START') target.status = 'RUNNING';
-  }
-
-  const logEntry = logAudit(
-    'approved-operator@multicloud.corp',
-    'ROLE_ADMIN',
-    provider || 'MULTI',
-    action || toolName || 'EXECUTE_APPROVED_ACTION',
-    target ? target.name : 'RESOURCE',
-    'CRITICAL',
-    'SUCCESS',
-    `Operação aprovada manualmente e executada com sucesso pelo agente. Alvo: ${target ? target.name : 'N/A'}.`
-  );
-
-  res.json({
-    reply: `✅ **Operação Executada com Sucesso**!\n\nA alteração no recurso \`${target ? target.name : 'solicitado'}\` foi concluída e o evento foi registrado na trilha de auditoria imutável (ID: \`${logEntry.id}\`).`,
-    status: 'SUCCESS',
-    invokedTools: [
-      {
-        toolName: toolName || 'execute_cloud_action',
-        provider: provider || 'AWS',
-        arguments: parameters || {},
-        result: 'Executado com sucesso no provedor.',
-        success: true,
-        latencyMs: 140
-      }
-    ]
+  res.status(501).json({
+    toolName: toolName || 'execute_cloud_action',
+    provider: provider || 'UNSPECIFIED',
+    resourceId: resourceId || null,
+    action: action || null,
+    parameters: parameters || {},
+    status: 'NOT_IMPLEMENTED',
+    executionPerformed: false,
+    message: 'Real cloud execution adapter is not configured. No infrastructure state was changed.'
   });
 });
 
-// ----------------------------------------------------
+// // ----------------------------------------------------
 // SERVER START & VITE MIDDLEWARE
 // ----------------------------------------------------
 async function startServer() {

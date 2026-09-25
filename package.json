@@ -23,7 +23,9 @@
     "vite": "^6.2.3",
     "express": "^4.21.2",
     "dotenv": "^17.2.3",
-    "motion": "^12.23.24"
+    "motion": "^12.23.24",
+    "@aws-sdk/client-sts": "^3.848.0",
+    "@aws-sdk/client-ec2": "^3.848.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
