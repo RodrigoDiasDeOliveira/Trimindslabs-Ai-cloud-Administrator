@@ -262,6 +262,10 @@ export class UnifiedCloudService {
 
   /**
    * Unified VM / Resource Termination (Destructive Operation with Confirmation & Dry-Run)
+   *
+   * Destructive provider execution remains intentionally unavailable until a real
+   * provider lifecycle adapter is implemented. The inventory is never mutated to
+   * represent a cloud-side termination.
    */
   static async terminateVm(
     provider: CloudProvider,
@@ -271,10 +275,9 @@ export class UnifiedCloudService {
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const prov = provider.toUpperCase();
-    const breaker = this.getBreaker(prov);
+    const target = existingInventory.find(r => r.id === resourceId || r.name === resourceId);
 
-    const targetIdx = existingInventory.findIndex(r => r.id === resourceId || r.name === resourceId);
-    if (targetIdx === -1) {
+    if (!target) {
       return {
         success: false,
         dryRun: !!options.dryRun,
@@ -285,14 +288,12 @@ export class UnifiedCloudService {
       };
     }
 
-    const target = existingInventory[targetIdx];
-
-    const plan = `------------------------------------------------------------\n` +
-      `[PLAN: DESTRUCTIVE ACTION] ${options.dryRun ? '(DRY-RUN MODE - NENHUM RECURSO SERÁ EXCLUÍDO)' : '(EXECUÇÃO DESTRUTIVA)'}\n` +
-      `- Provedor: ${prov}\n` +
-      `- Recurso a Destruir: ${target.name} (${target.id})\n` +
-      `- Tipo: ${target.resourceType} | Região: ${target.region}\n` +
-      `- Redução de Custo Estimada: -$${target.estimatedMonthlyCost.toFixed(2)} USD/mês\n` +
+    const plan = `------------------------------------------------------------\\n` +
+      `[PLAN: DESTRUCTIVE ACTION] ${options.dryRun ? '(DRY-RUN MODE - NENHUM RECURSO SERÁ EXCLUÍDO)' : '(EXECUÇÃO DESTRUTIVA)'}\\n` +
+      `- Provedor: ${prov}\\n` +
+      `- Recurso a Destruir: ${target.name} (${target.id})\\n` +
+      `- Tipo: ${target.resourceType} | Região: ${target.region}\\n` +
+      `- Redução de Custo Estimada: -$${target.estimatedMonthlyCost.toFixed(2)} USD/mês\\n` +
       `------------------------------------------------------------`;
 
     if (options.dryRun) {
@@ -303,35 +304,20 @@ export class UnifiedCloudService {
         operation: 'TERMINATE_VM',
         executionPlan: plan,
         estimatedCostDelta: -target.estimatedMonthlyCost,
-        message: `Plano de exclusão simulado via dry-run com sucesso.`,
+        message: 'Dry-run concluído: nenhum recurso foi alterado.',
         latencyMs: Date.now() - startTime
       };
     }
 
-    try {
-      await breaker.execute(async () => {
-        existingInventory.splice(targetIdx, 1);
-      });
-
-      return {
-        success: true,
-        dryRun: false,
-        provider: prov,
-        operation: 'TERMINATE_VM',
-        executionPlan: plan,
-        estimatedCostDelta: -target.estimatedMonthlyCost,
-        message: `Recurso ${target.name} terminado e desprovisionado com sucesso de ${prov}.`,
-        latencyMs: Date.now() - startTime
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        dryRun: false,
-        provider: prov,
-        operation: 'TERMINATE_VM',
-        message: `Falha na destruição do recurso: ${err.message}`,
-        latencyMs: Date.now() - startTime
-      };
-    }
+    return {
+      success: false,
+      dryRun: false,
+      provider: prov,
+      operation: 'TERMINATE_VM',
+      executionPlan: plan,
+      estimatedCostDelta: 0,
+      message: `NOT_IMPLEMENTED: nenhum adapter real de lifecycle está configurado para ${prov}. Nenhum recurso foi alterado.`,
+      latencyMs: Date.now() - startTime
+    };
   }
 }
