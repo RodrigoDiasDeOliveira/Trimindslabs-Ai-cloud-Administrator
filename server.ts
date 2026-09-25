@@ -186,38 +186,38 @@ app.get('/api/actuator/health', (req: Request, res: Response) => {
 const initialProviders = [
   {
     provider: 'AWS',
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'us-east-1',
     activeResourcesCount: 3,
-    latencyMs: 42,
-    credentialsValid: true,
+    latencyMs: 0,
+    credentialsValid: false,
     availableServices: ['EC2', 'S3', 'RDS Aurora', 'VPC', 'IAM', 'Lambda', 'KMS']
   },
   {
     provider: 'AZURE',
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'eastus',
     activeResourcesCount: 2,
-    latencyMs: 56,
-    credentialsValid: true,
+    latencyMs: 0,
+    credentialsValid: false,
     availableServices: ['Virtual Machines', 'Blob Storage', 'Azure SQL', 'VNet', 'Entra ID']
   },
   {
     provider: 'GCP',
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'us-central1',
     activeResourcesCount: 2,
-    latencyMs: 38,
-    credentialsValid: true,
+    latencyMs: 0,
+    credentialsValid: false,
     availableServices: ['Compute Engine', 'Cloud Storage', 'Cloud SQL', 'GKE Autopilot', 'Cloud KMS']
   },
   {
     provider: 'OCI',
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'sa-saopaulo-1',
     activeResourcesCount: 2,
-    latencyMs: 49,
-    credentialsValid: true,
+    latencyMs: 0,
+    credentialsValid: false,
     availableServices: ['Compute ARM64', 'Object Storage', 'Autonomous DB', 'VCN', 'Vault']
   }
 ];
@@ -406,11 +406,11 @@ app.post('/api/providers/add', (req: Request, res: Response) => {
 
   const newProviderObj = {
     provider: provUpper,
-    status: 'HEALTHY' as const,
+    status: 'NOT_CONFIGURED' as const,
     defaultRegion: defaultRegion || 'us-east-1',
     activeResourcesCount: 0,
     latencyMs: Math.floor(Math.random() * 25) + 35,
-    credentialsValid: true,
+    credentialsValid: false,
     availableServices: services
   };
 
