@@ -1,5 +1,4 @@
 import { CloudProvider, CloudResource, ResourceCategory } from '../types';
-import { CloudProvider, CloudResource } from '../types';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import { DescribeInstancesCommand, EC2Client } from '@aws-sdk/client-ec2';
 import { CircuitBreaker, retryWithTenacity } from './resilience';
