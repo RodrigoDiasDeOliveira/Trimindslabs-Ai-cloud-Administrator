@@ -1,4 +1,5 @@
 import { CloudProvider, CloudResource, ResourceCategory } from '../types';
+import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import { CircuitBreaker, retryWithTenacity } from './resilience';
 import { OpaPolicyEngine } from './opaEngine';
 import { InputValidator } from './inputValidator';
@@ -99,15 +100,31 @@ export class UnifiedCloudService {
     try {
       return await breaker.execute(async () => {
         return await retryWithTenacity(async () => {
-          return {
-            provider: prov,
-            probeType: target.type,
-            targetEndpoint: target.endpoint,
-            statusCode: 503,
-            success: false,
-            latencyMs: latency,
+          if (prov !== 'AWS') {
+            return {
+              provider: prov,
+              probeType: target.type,
+              targetEndpoint: target.endpoint,
+              statusCode: 503,
+              success: false,
+              latencyMs: Date.now() - startTime,
             checkedAt: new Date().toISOString(),
             message: `NOT_CONFIGURED: no real provider adapter is wired for ${prov}. No connectivity result was simulated.`,
+              circuitBreakerState: breaker.getState()
+            };
+          }
+
+          const client = new STSClient({});
+          const response = await client.send(new GetCallerIdentityCommand({}));
+          return {
+            provider: prov,
+            probeType: 'sts:GetCallerIdentity',
+            targetEndpoint: 'AWS STS',
+            statusCode: 200,
+            success: true,
+            latencyMs: Date.now() - startTime,
+            checkedAt: new Date().toISOString(),
+            message: `AWS identity verified${response.Account ? ` for account ${response.Account}` : ''}.`,
             circuitBreakerState: breaker.getState()
           };
         }, { maxAttempts: 2, initialDelayMs: 50 });
@@ -221,11 +238,10 @@ export class UnifiedCloudService {
       });
 
       return {
-        success: true,
+        success: false,
         dryRun: false,
         provider: prov,
         operation: 'CREATE_VM',
-        result: created,
         executionPlan: plan,
         estimatedCostDelta: estimatedCost,
         opaScore: opaResult.complianceScore,
