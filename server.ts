@@ -276,22 +276,24 @@ app.get('/api/health', (req: Request, res: Response) => {
   res.json({
     status: 'UP',
     timestamp: new Date().toISOString(),
-    engine: 'Express+Gemini Enterprise Multi-Cloud Engine',
-    springBootReady: true,
-    version: '1.0.0-PROD'
+    engine: 'AI MultiCloud Administrator',
+    runtime: 'EXPRESS',
+    springBootReady: false,
+    version: '1.0.0'
   });
 });
 
 app.get('/api/actuator/health', (req: Request, res: Response) => {
-  res.json({
-    status: 'UP',
+  res.status(503).json({
+    status: 'DEGRADED',
     components: {
-      awsAdapter: { status: 'UP', latencyMs: 42 },
-      azureAdapter: { status: 'UP', latencyMs: 56 },
-      gcpAdapter: { status: 'UP', latencyMs: 38 },
-      ociAdapter: { status: 'UP', latencyMs: 49 },
-      aiAgentCore: { status: 'UP', model: 'gemini-3.8-flash' }
-    }
+      awsAdapter: { status: 'NOT_CONFIGURED' },
+      azureAdapter: { status: 'NOT_CONFIGURED' },
+      gcpAdapter: { status: 'NOT_CONFIGURED' },
+      ociAdapter: { status: 'NOT_CONFIGURED' },
+      aiAgentCore: { status: process.env.GEMINI_API_KEY ? 'CONFIGURED' : 'NOT_CONFIGURED' }
+    },
+    message: 'No provider health is reported without a real connectivity probe.'
   });
 });
 
@@ -1304,117 +1306,33 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
       });
     }
 
-    // Fallback: Intelligent Simulated Multi-Cloud Engine
-    let simulatedReply = '';
-    let toolName = 'multicloud_query';
-    let provider = 'ALL';
-
-    if (promptLower.includes('s3') || (promptLower.includes('bucket') && promptLower.includes('aws'))) {
-      provider = 'AWS';
-      toolName = 'aws_s3_list_buckets';
-      const s3Buckets = resources.filter(r => r.provider === 'AWS' && r.category === 'STORAGE');
-      simulatedReply = `### 📦 Relatório de Buckets AWS S3\n\nForam localizados **${s3Buckets.length} bucket(s)** na região \`us-east-1\`:\n\n` +
-        s3Buckets.map(b => `- **Nome:** \`${b.name}\`\n  - **Tipo:** ${b.resourceType}\n  - **Custo Mensal:** $${b.estimatedMonthlyCost.toFixed(2)}\n  - **Conformidade:** ✅ ${b.securityPosture} (Criptografia KMS ativa, sem acesso público)`).join('\n\n');
-    } else if (promptLower.includes('vm') || promptLower.includes('instância') || promptLower.includes('compute') || promptLower.includes('ec2')) {
-      const vms = resources.filter(r => r.category === 'COMPUTE');
-      toolName = 'multicloud_list_instances';
-      simulatedReply = `### 🖥️ Instâncias de Computação Multi-Cloud Ativas\n\n` +
-        `Total de máquinas em execução: **${vms.length}**\n\n` +
-        vms.map(v => `| Provedor | Nome | Tipo | Região | Status | Custo |\n|---|---|---|---|---|---|\n| **${v.provider}** | \`${v.name}\` | ${v.resourceType} | ${v.region} | 🟢 ${v.status} | $${v.estimatedMonthlyCost.toFixed(2)}/mês |`).join('\n') +
-        `\n\n*Todas as instâncias estão com os agentes de telemetria operacionais e sem vulnerabilidades críticas detectadas.*`;
-    } else if (promptLower.includes('banco') || promptLower.includes('database') || promptLower.includes('sql')) {
-      const dbs = resources.filter(r => r.category === 'DATABASE');
-      toolName = 'multicloud_list_databases';
-      simulatedReply = `### 🗄️ Bancos de Dados Gerenciados Multi-Cloud\n\n` +
-        `Identificados **${dbs.length} clusters de banco de dados** em produção:\n\n` +
-        dbs.map(d => `- **${d.provider}** :: \`${d.name}\` (${d.resourceType})\n  - **Região:** ${d.region}\n  - **Custo:** $${d.estimatedMonthlyCost.toFixed(2)}/mês\n  - **Segurança:** Backups diários automatizados e conexões TLS 1.3 obrigatórias.`).join('\n\n');
-    } else if (promptLower.includes('custo') || promptLower.includes('finops') || promptLower.includes('valor')) {
-      const total = resources.reduce((acc, r) => acc + r.estimatedMonthlyCost, 0);
-      toolName = 'finops_cost_analysis';
-      simulatedReply = `### 💰 Análise de Custos Multi-Cloud (FinOps)\n\n` +
-        `- **Previsão Total Mensal:** **$${total.toFixed(2)} USD**\n` +
-        `- **AWS:** $${resources.filter(r => r.provider === 'AWS').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2)}\n` +
-        `- **GCP:** $${resources.filter(r => r.provider === 'GCP').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2)}\n` +
-        `- **Azure:** $${resources.filter(r => r.provider === 'AZURE').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2)}\n` +
-        `- **OCI:** $${resources.filter(r => r.provider === 'OCI').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2)}\n\n` +
-        `💡 **Recomendação:** Há uma oportunidade de migrar instâncias computacionais pontuais para Savings Plans de 1 ano, gerando uma economia de até **$24.80/mês**.`;
-    } else {
-      simulatedReply = `Olá! Sou o **AI MultiCloud Agent** (Pronto para Produção). Posso executar tarefas operacionais e de governança nos 4 provedores de nuvem:\n\n` +
-        `- **AWS**: Listar/Criar instâncias EC2, inspecionar S3 e clusters RDS Aurora.\n` +
-        `- **Azure**: Auditar Resource Groups, gerenciar VMs e Blob Storage.\n` +
-        `- **GCP**: Supervisionar Cloud SQL, Compute Engine e clusters GKE Autopilot.\n` +
-        `- **OCI (Oracle)**: Orquestrar instâncias ARM64 e Autonomous Databases.\n` +
-        `- **Segurança & FinOps**: Calcular Blast Radius de comandos e auditar conformidade.\n\n` +
-        `Como posso te ajudar com a sua infraestrutura agora?`;
-    }
-
-    tracer.recordSpan('INVOKE_TOOL', toolName, 60, { provider });
+    // No simulated provider fallback.
+    tracer.recordSpan('NO_REAL_PROVIDER_EXECUTION', 'MULTI_CLOUD_ADAPTER', 0, { status: 'NOT_CONFIGURED' });
     tracer.finish();
-
-    res.json({
-      reply: simulatedReply,
-      status: 'SUCCESS',
-      invokedTools: [
-        {
-          toolName,
-          provider,
-          arguments: { query: prompt },
-          result: 'Comando executado com sucesso.',
-          success: true,
-          latencyMs: 85,
-          traceId
-        }
-      ],
+    res.status(503).json({
+      reply: 'Nenhuma operação foi executada em um provedor de nuvem real. Configure um adapter/provider antes de executar esta solicitação.',
+      status: 'NOT_CONFIGURED',
+      invokedTools: [],
       traceId
     });
-  } catch (err: any) {
-    console.error('Agent chat error:', err);
-    res.status(500).json({ error: err.message || 'Falha ao processar agente' });
   }
-});
 
-// Direct Tool Execution after Approval
+  // Direct Tool Execution after Approval
 app.post('/api/agent/execute', (req: Request, res: Response) => {
   const { toolName, provider, parameters, resourceId, action } = req.body;
-
-  let target = resources.find(r => r.id === resourceId);
-  if (!target && resourceId) {
-    target = resources.find(r => r.name === resourceId);
-  }
-
-  if (target && action) {
-    if (action === 'STOP') target.status = 'STOPPED';
-    if (action === 'START') target.status = 'RUNNING';
-  }
-
-  const logEntry = logAudit(
-    'approved-operator@multicloud.corp',
-    'ROLE_ADMIN',
-    provider || 'MULTI',
-    action || toolName || 'EXECUTE_APPROVED_ACTION',
-    target ? target.name : 'RESOURCE',
-    'CRITICAL',
-    'SUCCESS',
-    `Operação aprovada manualmente e executada com sucesso pelo agente. Alvo: ${target ? target.name : 'N/A'}.`
-  );
-
-  res.json({
-    reply: `✅ **Operação Executada com Sucesso**!\n\nA alteração no recurso \`${target ? target.name : 'solicitado'}\` foi concluída e o evento foi registrado na trilha de auditoria imutável (ID: \`${logEntry.id}\`).`,
-    status: 'SUCCESS',
-    invokedTools: [
-      {
-        toolName: toolName || 'execute_cloud_action',
-        provider: provider || 'AWS',
-        arguments: parameters || {},
-        result: 'Executado com sucesso no provedor.',
-        success: true,
-        latencyMs: 140
-      }
-    ]
+  res.status(501).json({
+    toolName: toolName || 'execute_cloud_action',
+    provider: provider || 'UNSPECIFIED',
+    resourceId: resourceId || null,
+    action: action || null,
+    parameters: parameters || {},
+    status: 'NOT_IMPLEMENTED',
+    executionPerformed: false,
+    message: 'Real cloud execution adapter is not configured. No infrastructure state was changed.'
   });
 });
 
-// ----------------------------------------------------
+// // ----------------------------------------------------
 // SERVER START & VITE MIDDLEWARE
 // ----------------------------------------------------
 async function startServer() {
