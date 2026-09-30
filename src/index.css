@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+
+/* Trimindslabs Light Corporate Standard — visual layer only */
+@layer base { html, body { background:#f8fafc; color:#0f172a; } }
+[class*="bg-black"],[class*="bg-zinc-9"],[class*="bg-slate-9"],[class*="bg-gray-9"],[class*="bg-[#0"],[class*="bg-[#1"]{background-color:#fff !important}
+[class*="text-white"],[class*="text-zinc-100"],[class*="text-zinc-200"]{color:#0f172a !important}
+[class*="text-zinc-300"],[class*="text-zinc-400"]{color:#334155 !important}
+[class*="border-white/"],[class*="border-zinc-7"],[class*="border-zinc-8"],[class*="border-slate-7"],[class*="border-slate-8"]{border-color:#e2e8f0 !important}
