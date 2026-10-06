@@ -164,7 +164,7 @@ const initialProviders = [
     provider: 'AWS',
     status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'us-east-1',
-    activeResourcesCount: 3,
+    activeResourcesCount: 0,
     latencyMs: 0,
     credentialsValid: false,
     availableServices: ['EC2', 'S3', 'RDS Aurora', 'VPC', 'IAM', 'Lambda', 'KMS']
@@ -173,7 +173,7 @@ const initialProviders = [
     provider: 'AZURE',
     status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'eastus',
-    activeResourcesCount: 2,
+    activeResourcesCount: 0,
     latencyMs: 0,
     credentialsValid: false,
     availableServices: ['Virtual Machines', 'Blob Storage', 'Azure SQL', 'VNet', 'Entra ID']
@@ -182,7 +182,7 @@ const initialProviders = [
     provider: 'GCP',
     status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'us-central1',
-    activeResourcesCount: 2,
+    activeResourcesCount: 0,
     latencyMs: 0,
     credentialsValid: false,
     availableServices: ['Compute Engine', 'Cloud Storage', 'Cloud SQL', 'GKE Autopilot', 'Cloud KMS']
@@ -191,7 +191,7 @@ const initialProviders = [
     provider: 'OCI',
     status: 'NOT_CONFIGURED' as const,
     defaultRegion: 'sa-saopaulo-1',
-    activeResourcesCount: 2,
+    activeResourcesCount: 0,
     latencyMs: 0,
     credentialsValid: false,
     availableServices: ['Compute ARM64', 'Object Storage', 'Autonomous DB', 'VCN', 'Vault']
