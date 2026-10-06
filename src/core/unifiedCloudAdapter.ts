@@ -337,14 +337,9 @@ export class UnifiedCloudService {
       };
     }
 
-    // 5. Execute via Circuit Breaker & Retry
-    try {
-      const created = await breaker.execute(async () => {
-        return await retryWithTenacity(async () => {
-          throw new Error('REAL_PROVIDER_ADAPTER_NOT_CONFIGURED');
-        }, { maxAttempts: 2 });
-      });
-
+    // 5. Execute through a real provider adapter. AWS is currently wired; other
+    // providers remain explicitly NOT_CONFIGURED and never report simulated success.
+    if (prov !== 'AWS') {
       return {
         success: false,
         dryRun: false,
@@ -356,13 +351,49 @@ export class UnifiedCloudService {
         message: `REAL_PROVIDER_ADAPTER_NOT_CONFIGURED: no VM was created in ${prov}.`,
         latencyMs: Date.now() - startTime
       };
+    }
+
+    try {
+      const created = await breaker.execute(async () => retryWithTenacity(async () => {
+        const client = new EC2Client({ region: options.region || process.env.AWS_REGION || 'us-east-1' });
+        if (!options.image) throw new Error('AWS AMI image is required for real VM creation');
+        const result = await client.send(new RunInstancesCommand({
+          ImageId: options.image,
+          InstanceType: options.instanceType,
+          MinCount: 1,
+          MaxCount: 1,
+          TagSpecifications: [{
+            ResourceType: 'instance',
+            Tags: Object.entries(resourceCandidate.tags).map(([Key, Value]) => ({ Key, Value }))
+          }]
+        }));
+        const instance = result.Instances?.[0];
+        if (!instance?.InstanceId) throw new Error('AWS did not return an instance id');
+        return { instanceId: instance.InstanceId, state: instance.State?.Name || 'pending' };
+      }, { maxAttempts: 2 }));
+
+      return {
+        success: true,
+        dryRun: false,
+        provider: prov,
+        operation: 'CREATE_VM',
+        result: created,
+        executionPlan: plan,
+        estimatedCostDelta: estimatedCost,
+        opaScore: opaResult.complianceScore,
+        message: `AWS EC2 instance ${created.instanceId} created successfully.`,
+        latencyMs: Date.now() - startTime
+      };
     } catch (err: any) {
       return {
         success: false,
         dryRun: false,
         provider: prov,
         operation: 'CREATE_VM',
-        message: `Falha ao provisionar VM: ${err.message}`,
+        executionPlan: plan,
+        estimatedCostDelta: estimatedCost,
+        opaScore: opaResult.complianceScore,
+        message: `Falha ao provisionar VM em AWS: ${err?.message || String(err)}`,
         latencyMs: Date.now() - startTime
       };
     }
@@ -417,15 +448,24 @@ export class UnifiedCloudService {
       };
     }
 
+    if (prov !== 'AWS') {
+      return {
+        success: false,
+        dryRun: false,
+        provider: prov,
+        operation: 'TERMINATE_VM',
+        executionPlan: plan,
+        estimatedCostDelta: 0,
+        message: `NOT_IMPLEMENTED: nenhum adapter real de lifecycle está configurado para ${prov}. Nenhum recurso foi alterado.`,
+        latencyMs: Date.now() - startTime
+      };
+    }
+
+    const result = await this.performAwsInstanceAction('TERMINATE', target.nativeArnOrId || target.id, target.region);
     return {
-      success: false,
-      dryRun: false,
-      provider: prov,
-      operation: 'TERMINATE_VM',
+      ...result,
       executionPlan: plan,
-      estimatedCostDelta: 0,
-      message: `NOT_IMPLEMENTED: nenhum adapter real de lifecycle está configurado para ${prov}. Nenhum recurso foi alterado.`,
-      latencyMs: Date.now() - startTime
+      estimatedCostDelta: result.success ? -target.estimatedMonthlyCost : 0
     };
   }
 }
