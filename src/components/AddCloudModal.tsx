@@ -40,49 +40,49 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
 
   const [selectedProvider, setSelectedProvider] = useState<string>('AWS');
   const [defaultRegion, setDefaultRegion] = useState<string>('');
-  const [accountName, setAccountName] = useState<string>('Corporate-Primary');
+  const [accountName, setAccountName] = useState<string>('');
 
   // AWS Fields
-  const [awsAccessKey, setAwsAccessKey] = useState('AKIA' + Math.random().toString(36).substring(2, 12).toUpperCase());
-  const [awsSecretKey, setAwsSecretKey] = useState('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
-  const [awsAccountId, setAwsAccountId] = useState('850635235673');
-  const [awsRoleArn, setAwsRoleArn] = useState('arn:aws:iam::850635235673:role/AI-MultiCloud-Agent');
+  const [awsAccessKey, setAwsAccessKey] = useState('');
+  const [awsSecretKey, setAwsSecretKey] = useState('');
+  const [awsAccountId, setAwsAccountId] = useState('');
+  const [awsRoleArn, setAwsRoleArn] = useState('');
 
   // Azure Fields
-  const [azureTenantId, setAzureTenantId] = useState('72f988bf-86f1-41af-91ab-2d7cd011db47');
-  const [azureClientId, setAzureClientId] = useState('3b45a234-5678-90ab-cdef-1234567890ab');
-  const [azureSecret, setAzureSecret] = useState('sec~xyz9876543210azureSecretKey');
-  const [azureSubId, setAzureSubId] = useState('c0a80101-1234-5678-90ab-cdef12345678');
-  const [azureResourceGroup, setAzureResourceGroup] = useState('rg-enterprise-cloud-prod');
+  const [azureTenantId, setAzureTenantId] = useState('');
+  const [azureClientId, setAzureClientId] = useState('');
+  const [azureSecret, setAzureSecret] = useState('');
+  const [azureSubId, setAzureSubId] = useState('');
+  const [azureResourceGroup, setAzureResourceGroup] = useState('');
 
   // GCP Fields
-  const [gcpProjectId, setGcpProjectId] = useState('gcp-multicloud-prod-2026');
-  const [gcpServiceAccount, setGcpServiceAccount] = useState('agent-service@gcp-multicloud-prod-2026.iam.gserviceaccount.com');
+  const [gcpProjectId, setGcpProjectId] = useState('');
+  const [gcpServiceAccount, setGcpServiceAccount] = useState('');
   const [gcpZone, setGcpZone] = useState('');
 
   // OCI Fields
-  const [ociTenancyOcid, setOciTenancyOcid] = useState('ocid1.tenancy.oc1..aaaaaaaaxampletenancy');
-  const [ociUserOcid, setOciUserOcid] = useState('ocid1.user.oc1..aaaaaaaaxampleuser');
-  const [ociFingerprint, setOciFingerprint] = useState('20:3b:97:13:55:1c:11:0d:d1:67:f0:19:e2:c1:05:db');
-  const [ociCompartment, setOciCompartment] = useState('ocid1.compartment.oc1..aaaaaaaacompartment');
+  const [ociTenancyOcid, setOciTenancyOcid] = useState('');
+  const [ociUserOcid, setOciUserOcid] = useState('');
+  const [ociFingerprint, setOciFingerprint] = useState('');
+  const [ociCompartment, setOciCompartment] = useState('');
 
   // Custom / Alibaba Fields
-  const [customEndpoint, setCustomEndpoint] = useState('https://api.cloud.custom-datacenter.net');
+  const [customEndpoint, setCustomEndpoint] = useState('');
 
   // Resource Selection Checkboxes
-  const [enableCompute, setEnableCompute] = useState(true);
-  const [computeInstanceType, setComputeInstanceType] = useState('t3.large');
+  const [enableCompute, setEnableCompute] = useState(false);
+  const [computeInstanceType, setComputeInstanceType] = useState('');
   const [computeInstanceName, setComputeInstanceName] = useState('');
 
-  const [enableStorage, setEnableStorage] = useState(true);
+  const [enableStorage, setEnableStorage] = useState(false);
   const [storageBucketName, setStorageBucketName] = useState('');
 
-  const [enableDatabase, setEnableDatabase] = useState(true);
+  const [enableDatabase, setEnableDatabase] = useState(false);
   const [databaseEngine, setDatabaseEngine] = useState('PostgreSQL 16');
 
   const [enableServerless, setEnableServerless] = useState(false);
-  const [enableNetworking, setEnableNetworking] = useState(true);
-  const [enableSecurity, setEnableSecurity] = useState(true);
+  const [enableNetworking, setEnableNetworking] = useState(false);
+  const [enableSecurity, setEnableSecurity] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -122,21 +122,16 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
         throw new Error('Informe a zona do GCP antes de continuar.');
       }
 
-      // Build selected services list
       const selectedServices: string[] = [];
-      if (enableCompute) selectedServices.push('Compute & VMs');
-      if (enableStorage) selectedServices.push('Object Storage');
-      if (enableDatabase) selectedServices.push('Managed Databases');
-      if (enableServerless) selectedServices.push('Serverless Functions');
-      if (enableNetworking) selectedServices.push('Networking (VPC/VNet)');
-      if (enableSecurity) selectedServices.push('Security & KMS');
+      if (enableCompute) selectedServices.push('COMPUTE');
+      if (enableStorage) selectedServices.push('STORAGE');
+      if (enableDatabase) selectedServices.push('DATABASE');
+      if (enableServerless) selectedServices.push('SERVERLESS');
+      if (enableNetworking) selectedServices.push('NETWORKING');
+      if (enableSecurity) selectedServices.push('SECURITY');
 
       if (selectedServices.length === 0) {
-        throw new Error('Selecione pelo menos um recurso/serviço via checkbox para monitorar.');
-      }
-
-      if (selectedProvider !== 'GCP') {
-        throw new Error('A validação real está disponível agora para GCP. Os demais provedores permanecem NOT_CONFIGURED até seus adapters reais serem implementados.');
+        throw new Error('Selecione pelo menos um escopo de descoberta. Nenhum recurso será criado automaticamente.');
       }
 
       const storedSession = localStorage.getItem('multicloud_user');
@@ -144,69 +139,25 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
       if (storedSession) {
         try {
           const session = JSON.parse(storedSession);
-          if (session?.token) headers.Authorization = `Bearer ${session.token}`;
+          if (session?.token) headers.Authorization = 'Bearer ' + session.token;
         } catch {}
       }
 
-      const res = await fetch('/api/providers/gcp/connect', {
+      const credentials: Record<string, string> = {};
+      if (selectedProvider === 'AWS') Object.assign(credentials, { accessKeyId: awsAccessKey.trim(), secretAccessKey: awsSecretKey, accountId: awsAccountId.trim(), roleArn: awsRoleArn.trim() });
+      if (selectedProvider === 'AZURE') Object.assign(credentials, { tenantId: azureTenantId.trim(), clientId: azureClientId.trim(), clientSecret: azureSecret, subscriptionId: azureSubId.trim(), resourceGroup: azureResourceGroup.trim() });
+      if (selectedProvider === 'GCP') Object.assign(credentials, { projectId: gcpProjectId.trim(), serviceAccount: gcpServiceAccount.trim(), zone: gcpZone.trim() });
+      if (selectedProvider === 'OCI') Object.assign(credentials, { tenancyOcid: ociTenancyOcid.trim(), userOcid: ociUserOcid.trim(), fingerprint: ociFingerprint.trim(), compartmentOcid: ociCompartment.trim() });
+      if (selectedProvider === 'ALIBABA') Object.assign(credentials, { customEndpoint: customEndpoint.trim() });
+
+      const res = await fetch('/api/providers/connect', {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          projectId: gcpProjectId.trim(),
-          serviceAccount: gcpServiceAccount.trim(),
-          defaultRegion: defaultRegion.trim(),
-          zone: gcpZone.trim(),
-          selectedServices
-        })
+        body: JSON.stringify({ provider: selectedProvider, accountName: accountName.trim(), defaultRegion: defaultRegion.trim(), credentials, selectedServices })
       });
-
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || data.error || 'Falha ao validar conexão GCP.');
-
+      if (!res.ok) throw new Error(data.message || data.error || 'Falha ao validar a conexão.');
       onCloudAdded(data.provider, data.discoveredResources?.length || 0);
-      onClose();
-      // Credentials object
-      const credentials: Record<string, any> = {};
-      if (selectedProvider === 'AWS') {
-        credentials.accessKeyId = awsAccessKey;
-        credentials.accountId = awsAccountId;
-        credentials.roleArn = awsRoleArn;
-      } else if (selectedProvider === 'AZURE') {
-        credentials.tenantId = azureTenantId;
-        credentials.clientId = azureClientId;
-        credentials.subscriptionId = azureSubId;
-        credentials.resourceGroup = azureResourceGroup;
-      } else if (selectedProvider === 'GCP') {
-        credentials.projectId = gcpProjectId;
-        credentials.serviceAccount = gcpServiceAccount;
-        credentials.zone = gcpZone;
-      } else if (selectedProvider === 'OCI') {
-        credentials.tenancyOcid = ociTenancyOcid;
-        credentials.userOcid = ociUserOcid;
-        credentials.fingerprint = ociFingerprint;
-        credentials.compartmentOcid = ociCompartment;
-      } else {
-        credentials.customEndpoint = customEndpoint;
-      }
-
-      const res = await fetch('/api/providers/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: selectedProvider,
-          defaultRegion,
-          credentials,
-          selectedServices,
-          initialResources
-        })
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Falha ao cadastrar provedor de nuvem.');
-      }
-
-      onCloudAdded(data.provider, data.addedResourcesCount);
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro ao processar conexão da nuvem.');
