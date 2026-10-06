@@ -54,10 +54,10 @@ export default function App() {
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [governance, setGovernance] = useState<GovernanceData>({
-    complianceScore: 96,
-    totalMonthlyEstimate: '830.55',
-    activeCloudCount: 4,
-    totalResources: 9,
+    complianceScore: 0,
+    totalMonthlyEstimate: '0.00',
+    activeCloudCount: 0,
+    totalResources: 0,
     policies: [],
     costOptimizationRecommendations: []
   });
@@ -66,7 +66,7 @@ export default function App() {
     {
       id: 'msg-welcome',
       sender: 'agent',
-      text: `👋 Olá! Sou o **AI MultiCloud Agent (Enterprise Ready)**.\n\nEstou conectado a **AWS**, **Microsoft Azure**, **Google Cloud (GCP)** e **Oracle Cloud (OCI)** com guardrails de segurança ativos.\n\nVocê pode me pedir para auditar recursos, estimar custos, checar conformidade CIS ou operar instâncias em linguagem natural. Experimente um dos atalhos rápidos ou digite seu comando abaixo.`,
+      text: `👋 Olá! Sou o **AI MultiCloud Agent (Enterprise Ready)**.\n\nPosso analisar inventário, governança e operações de nuvem. A execução real depende dos adapters e credenciais configurados; provedores sem adapter permanecem como **NOT_CONFIGURED**.\n\nVocê pode me pedir para auditar recursos, estimar custos, checar políticas ou operar instâncias em linguagem natural. Experimente um dos atalhos rápidos ou digite seu comando abaixo.`,
       timestamp: new Date().toISOString(),
       status: 'SUCCESS'
     }
@@ -381,7 +381,7 @@ export default function App() {
         providers={providers}
         currentTab={currentTab}
         onTabChange={setCurrentTab}
-        activeCloudCount={providers.length}
+        activeCloudCount={providers.filter((p) => p.status === 'CONNECTED').length}
         backendMode={backendMode}
         theme={theme}
         onThemeChange={handleThemeChange}
