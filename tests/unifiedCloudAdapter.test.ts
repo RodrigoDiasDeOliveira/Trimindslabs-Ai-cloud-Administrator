@@ -20,7 +20,7 @@ describe('Unified Multi-Cloud Abstraction Layer Tests', () => {
     }
   ];
 
-  it('deve simular criação de VM em Dry-Run sem alterar o inventário', async () => {
+  it('deve manter o Dry-Run sem alterar o inventário', async () => {
     const initialCount = mockInventory.length;
     const result = await UnifiedCloudService.createVm(
       {
@@ -37,10 +37,10 @@ describe('Unified Multi-Cloud Abstraction Layer Tests', () => {
     assert.equal(result.success, true);
     assert.equal(result.dryRun, true);
     assert.ok(result.executionPlan?.includes('DRY-RUN MODE'));
-    assert.equal(mockInventory.length, initialCount, 'Inventário não deve ser alterado em dry-run');
+    assert.equal(mockInventory.length, initialCount);
   });
 
-  it('deve provisionar VM na nuvem quando dryRun for false', async () => {
+  it('não deve simular provisionamento em provider sem adapter real', async () => {
     const initialCount = mockInventory.length;
     const result = await UnifiedCloudService.createVm(
       {
@@ -54,13 +54,13 @@ describe('Unified Multi-Cloud Abstraction Layer Tests', () => {
       mockInventory
     );
 
-    assert.equal(result.success, true);
+    assert.equal(result.success, false);
     assert.equal(result.dryRun, false);
-    assert.equal(mockInventory.length, initialCount + 1);
-    assert.equal(mockInventory[mockInventory.length - 1].provider, 'GCP');
+    assert.equal(mockInventory.length, initialCount);
+    assert.match(result.message, /^REAL_PROVIDER_ADAPTER_NOT_CONFIGURED:/);
   });
 
-  it('deve simular término de recurso em Dry-Run calculando economia', async () => {
+  it('deve manter o término em Dry-Run sem alterar o inventário', async () => {
     const target = mockInventory[0];
     const initialCount = mockInventory.length;
 
@@ -70,19 +70,29 @@ describe('Unified Multi-Cloud Abstraction Layer Tests', () => {
     assert.equal(result.dryRun, true);
     assert.ok(result.executionPlan?.includes('DRY-RUN MODE'));
     assert.equal(result.estimatedCostDelta, -target.estimatedMonthlyCost);
-    assert.equal(mockInventory.length, initialCount, 'Recurso não deve ser removido em dry-run');
+    assert.equal(mockInventory.length, initialCount);
   });
 
-  it('deve executar health probe real leve medindo latência', async () => {
-    const awsProbe = await UnifiedCloudService.performHealthProbe('AWS');
-    assert.equal(awsProbe.provider, 'AWS');
-    assert.equal(awsProbe.success, true);
-    assert.ok(awsProbe.latencyMs > 0);
-    assert.equal(awsProbe.statusCode, 200);
+  it('deve reportar providers sem adapter real como não configurados', async () => {
+    for (const provider of ['AZURE', 'GCP', 'OCI'] as const) {
+      const probe = await UnifiedCloudService.performHealthProbe(provider);
+      assert.equal(probe.provider, provider);
+      assert.equal(probe.success, false);
+      assert.equal(probe.statusCode, 503);
+      assert.match(probe.message, /^NOT_CONFIGURED:/);
+    }
+  });
 
-    const azureProbe = await UnifiedCloudService.performHealthProbe('AZURE');
-    assert.equal(azureProbe.provider, 'AZURE');
-    assert.equal(azureProbe.success, true);
-    assert.ok(azureProbe.latencyMs > 0);
+  it('deve executar probe AWS apenas quando credenciais reais estiverem disponíveis', async () => {
+    const probe = await UnifiedCloudService.performHealthProbe('AWS');
+    assert.equal(probe.provider, 'AWS');
+    if (probe.success) {
+      assert.equal(probe.statusCode, 200);
+      assert.ok(probe.latencyMs > 0);
+      assert.match(probe.message, /^AWS identity verified/);
+    } else {
+      assert.equal(probe.statusCode, 503);
+      assert.ok(probe.message.length > 0);
+    }
   });
 });
