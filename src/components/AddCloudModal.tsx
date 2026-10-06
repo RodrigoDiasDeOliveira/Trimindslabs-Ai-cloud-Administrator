@@ -135,58 +135,36 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
         throw new Error('Selecione pelo menos um recurso/serviço via checkbox para monitorar.');
       }
 
-      // Build initial sample resources according to checkboxes
-      const initialResources: any[] = [];
-      const prefix = selectedProvider.toLowerCase();
-
-      if (enableCompute) {
-        initialResources.push({
-          id: `res-${prefix}-vm-${Date.now().toString().slice(-4)}`,
-          name: computeInstanceName.trim() || `${prefix}-app-workload-node`,
-          provider: selectedProvider,
-          category: 'COMPUTE',
-          resourceType: computeInstanceType,
-          status: 'RUNNING',
-          region: defaultRegion,
-          estimatedMonthlyCost: 58.40,
-          tags: { Environment: 'Production', Owner: accountName, Workload: 'CoreServices' },
-          securityPosture: 'SECURE',
-          nativeArnOrId: `arn:${prefix}:compute:${defaultRegion}:inst-${Date.now().toString().slice(-6)}`
-        });
+      if (selectedProvider !== 'GCP') {
+        throw new Error('A validação real está disponível agora para GCP. Os demais provedores permanecem NOT_CONFIGURED até seus adapters reais serem implementados.');
       }
 
-      if (enableStorage) {
-        initialResources.push({
-          id: `res-${prefix}-stg-${Date.now().toString().slice(-4)}`,
-          name: storageBucketName.trim() || `${prefix}-data-lake-${accountName.toLowerCase().replace(/\s+/g, '-')}`,
-          provider: selectedProvider,
-          category: 'STORAGE',
-          resourceType: selectedProvider === 'AWS' ? 'S3 Standard' : selectedProvider === 'AZURE' ? 'Blob Storage Hot' : 'Cloud Storage Multi-Regional',
-          status: 'RUNNING',
-          region: defaultRegion,
-          estimatedMonthlyCost: 19.50,
-          tags: { DataClassification: 'Confidential', Encrypted: 'True', Owner: accountName },
-          securityPosture: 'SECURE',
-          nativeArnOrId: `urn:${prefix}:storage:${defaultRegion}:${storageBucketName || 'bucket-01'}`
-        });
+      const storedSession = localStorage.getItem('multicloud_user');
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (storedSession) {
+        try {
+          const session = JSON.parse(storedSession);
+          if (session?.token) headers.Authorization = `Bearer ${session.token}`;
+        } catch {}
       }
 
-      if (enableDatabase) {
-        initialResources.push({
-          id: `res-${prefix}-db-${Date.now().toString().slice(-4)}`,
-          name: `${prefix}-cluster-${databaseEngine.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-          provider: selectedProvider,
-          category: 'DATABASE',
-          resourceType: databaseEngine,
-          status: 'RUNNING',
-          region: defaultRegion,
-          estimatedMonthlyCost: 110.00,
-          tags: { HighAvailability: 'Multi-AZ', AutomatedBackups: 'Enabled' },
-          securityPosture: 'SECURE',
-          nativeArnOrId: `urn:${prefix}:db:${defaultRegion}:${databaseEngine}`
-        });
-      }
+      const res = await fetch('/api/providers/gcp/connect', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          projectId: gcpProjectId.trim(),
+          serviceAccount: gcpServiceAccount.trim(),
+          defaultRegion: defaultRegion.trim(),
+          zone: gcpZone.trim(),
+          selectedServices
+        })
+      });
 
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || data.error || 'Falha ao validar conexão GCP.');
+
+      onCloudAdded(data.provider, data.discoveredResources?.length || 0);
+      onClose();
       // Credentials object
       const credentials: Record<string, any> = {};
       if (selectedProvider === 'AWS') {
@@ -674,7 +652,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
               ) : (
                 <Plus className="w-4 h-4" />
               )}
-              <span>{t.btnConnectCloud}</span>
+              <span>{isLoading ? 'Validando e conectando...' : 'Validar e Conectar Nuvem'}</span>
             </button>
           </div>
         </form>
