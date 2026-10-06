@@ -64,6 +64,8 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
   const [ociTenancyOcid, setOciTenancyOcid] = useState('');
   const [ociUserOcid, setOciUserOcid] = useState('');
   const [ociFingerprint, setOciFingerprint] = useState('');
+  const [ociPrivateKey, setOciPrivateKey] = useState('');
+  const [ociPassphrase, setOciPassphrase] = useState('');
   const [ociCompartment, setOciCompartment] = useState('');
 
   // Custom / Alibaba Fields
@@ -124,10 +126,6 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
       if (enableNetworking) selectedServices.push('NETWORKING');
       if (enableSecurity) selectedServices.push('SECURITY');
 
-      if (selectedServices.length === 0) {
-        throw new Error('Selecione pelo menos um escopo de descoberta. Nenhum recurso será criado automaticamente.');
-      }
-
       const storedSession = localStorage.getItem('multicloud_user');
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (storedSession) {
@@ -141,7 +139,14 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
       if (selectedProvider === 'AWS') Object.assign(credentials, { accessKeyId: awsAccessKey.trim(), secretAccessKey: awsSecretKey, accountId: awsAccountId.trim(), roleArn: awsRoleArn.trim() });
       if (selectedProvider === 'AZURE') Object.assign(credentials, { tenantId: azureTenantId.trim(), clientId: azureClientId.trim(), clientSecret: azureSecret, subscriptionId: azureSubId.trim(), resourceGroup: azureResourceGroup.trim() });
       if (selectedProvider === 'GCP') Object.assign(credentials, { projectId: gcpProjectId.trim(), serviceAccount: gcpServiceAccount.trim(), zone: gcpZone.trim() });
-      if (selectedProvider === 'OCI') Object.assign(credentials, { tenancyOcid: ociTenancyOcid.trim(), userOcid: ociUserOcid.trim(), fingerprint: ociFingerprint.trim(), compartmentOcid: ociCompartment.trim() });
+      if (selectedProvider === 'OCI') Object.assign(credentials, {
+        tenancyOcid: ociTenancyOcid.trim(),
+        userOcid: ociUserOcid.trim(),
+        fingerprint: ociFingerprint.trim(),
+        privateKey: ociPrivateKey,
+        passphrase: ociPassphrase,
+        compartmentOcid: ociCompartment.trim()
+      });
       if (selectedProvider === 'ALIBABA') Object.assign(credentials, { customEndpoint: customEndpoint.trim() });
 
       const res = await fetch('/api/providers/connect', {
@@ -233,7 +238,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
               <span className="text-xs font-semibold text-indigo-300 flex items-center">
                 <Sliders className="w-4 h-4 mr-1.5" /> 2. Configurações Pertinentes ({selectedProvider}):
               </span>
-              <span className="text-[11px] text-slate-400">Credenciais Criptografadas</span>
+              <span className="text-[11px] text-slate-500">Credenciais usadas apenas para validação da conexão</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -282,7 +287,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="text-slate-300 block mb-1 font-medium">AWS Account ID (12 dígitos):</label>
+                    <label className="text-slate-300 block mb-1 font-medium">AWS Account ID (opcional):</label>
                     <input
                       type="text"
                       value={awsAccountId}
@@ -291,7 +296,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="text-slate-300 block mb-1 font-medium">IAM Role ARN (AssumeRole):</label>
+                    <label className="text-slate-300 block mb-1 font-medium">IAM Role ARN (opcional):</label>
                     <input
                       type="text"
                       value={awsRoleArn}
@@ -388,6 +393,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
                       type="text"
                       value={ociTenancyOcid}
                       onChange={(e) => setOciTenancyOcid(e.target.value)}
+                      required
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono text-[11px]"
                     />
                   </div>
@@ -397,6 +403,38 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
                       type="text"
                       value={ociUserOcid}
                       onChange={(e) => setOciUserOcid(e.target.value)}
+                      required
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono text-[11px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-300 block mb-1 font-medium">API Key Fingerprint:</label>
+                    <input
+                      type="text"
+                      value={ociFingerprint}
+                      onChange={(e) => setOciFingerprint(e.target.value)}
+                      placeholder="xx:xx:xx:..."
+                      required
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono text-[11px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-300 block mb-1 font-medium">Private Key PEM:</label>
+                    <textarea
+                      value={ociPrivateKey}
+                      onChange={(e) => setOciPrivateKey(e.target.value)}
+                      placeholder="-----BEGIN PRIVATE KEY-----"
+                      required
+                      rows={4}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono text-[10px] sm:col-span-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-300 block mb-1 font-medium">Passphrase (opcional):</label>
+                    <input
+                      type="password"
+                      value={ociPassphrase}
+                      onChange={(e) => setOciPassphrase(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono text-[11px]"
                     />
                   </div>
@@ -597,7 +635,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
               ) : (
                 <Plus className="w-4 h-4" />
               )}
-              <span>{isLoading ? 'Validando e conectando...' : 'Validar e Conectar Nuvem'}</span>
+              <span>{isLoading ? 'Validando conexão real...' : 'Validar e Cadastrar Ambiente'}</span>
             </button>
           </div>
         </form>
