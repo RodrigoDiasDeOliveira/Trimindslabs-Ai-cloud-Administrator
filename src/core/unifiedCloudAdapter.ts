@@ -346,7 +346,7 @@ export class UnifiedCloudService {
         provider: prov,
         operation: 'CREATE_VM',
         executionPlan: plan,
-        estimatedCostDelta: estimatedCost,
+        ...(estimatedCost !== null ? { estimatedCostDelta: estimatedCost } : {}),
         opaScore: opaResult.complianceScore,
         message: `REAL_PROVIDER_ADAPTER_NOT_CONFIGURED: no VM was created in ${prov}.`,
         latencyMs: Date.now() - startTime
@@ -383,7 +383,7 @@ export class UnifiedCloudService {
           status: 'PROVISIONING'
         },
         executionPlan: plan,
-        estimatedCostDelta: estimatedCost,
+        ...(estimatedCost !== null ? { estimatedCostDelta: estimatedCost } : {}),
         opaScore: opaResult.complianceScore,
         message: `AWS EC2 instance ${created.instanceId} created successfully.`,
         latencyMs: Date.now() - startTime
@@ -395,7 +395,7 @@ export class UnifiedCloudService {
         provider: prov,
         operation: 'CREATE_VM',
         executionPlan: plan,
-        estimatedCostDelta: estimatedCost,
+        ...(estimatedCost !== null ? { estimatedCostDelta: estimatedCost } : {}),
         opaScore: opaResult.complianceScore,
         message: `Falha ao provisionar VM em AWS: ${err?.message || String(err)}`,
         latencyMs: Date.now() - startTime
