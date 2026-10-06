@@ -1,6 +1,6 @@
 import { CloudProvider, CloudResource } from '../types';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
-import { DescribeInstancesCommand, EC2Client } from '@aws-sdk/client-ec2';
+import { DescribeInstancesCommand, EC2Client, RunInstancesCommand, TerminateInstancesCommand, StartInstancesCommand, StopInstancesCommand, RebootInstancesCommand } from '@aws-sdk/client-ec2';
 import { CircuitBreaker, retryWithTenacity } from './resilience';
 import { OpaPolicyEngine } from './opaEngine';
 import { InputValidator } from './inputValidator';
@@ -208,6 +208,46 @@ export class UnifiedCloudService {
         operation: 'DESCRIBE_INSTANCES',
         result: [],
         message: `AWS EC2 inventory probe failed: ${err?.message || String(err)}`,
+        latencyMs: Date.now() - startTime
+      };
+    }
+  }
+
+  static async performAwsInstanceAction(action: 'START' | 'STOP' | 'RESTART' | 'TERMINATE', instanceId: string, region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1'): Promise<ExecutionResult> {
+    const startTime = Date.now();
+    const client = new EC2Client({ region });
+    try {
+      let response: any;
+      switch (action) {
+        case 'START':
+          response = await client.send(new StartInstancesCommand({ InstanceIds: [instanceId] }));
+          break;
+        case 'STOP':
+          response = await client.send(new StopInstancesCommand({ InstanceIds: [instanceId] }));
+          break;
+        case 'RESTART':
+          response = await client.send(new RebootInstancesCommand({ InstanceIds: [instanceId] }));
+          break;
+        case 'TERMINATE':
+          response = await client.send(new TerminateInstancesCommand({ InstanceIds: [instanceId] }));
+          break;
+      }
+      return {
+        success: true,
+        dryRun: false,
+        provider: 'AWS',
+        operation: action,
+        result: response,
+        message: `AWS EC2 ${action} executed for ${instanceId}.`,
+        latencyMs: Date.now() - startTime
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        dryRun: false,
+        provider: 'AWS',
+        operation: action,
+        message: `AWS EC2 ${action} failed: ${err?.message || String(err)}`,
         latencyMs: Date.now() - startTime
       };
     }
