@@ -281,19 +281,19 @@ export class UnifiedCloudService {
     const sanitizedName = nameValidation.sanitizedValue || options.name;
 
     // 2. Compute cost estimation and resource candidate
-    const estimatedCost = options.estimatedCostMonthly ?? (prov === 'AWS' ? 67.20 : prov === 'AZURE' ? 72.00 : prov === 'GCP' ? 62.50 : 48.00);
+    const estimatedCost = options.estimatedCostMonthly ?? null;
 
     const resourceCandidate: CloudResource = {
       id: `res-${prov.toLowerCase()}-vm-${Date.now().toString().slice(-4)}`,
       name: sanitizedName,
       provider: prov as any,
       category: 'COMPUTE',
-      resourceType: options.instanceType || (prov === 'AWS' ? 'EC2 t3.large' : prov === 'AZURE' ? 'VM Standard_D2s_v5' : prov === 'GCP' ? 'e2-standard-4' : 'VM.Standard.A1.Flex'),
-      status: 'RUNNING',
-      region: options.region || 'us-east-1',
+      resourceType: options.instanceType || 'UNSPECIFIED',
+      status: 'UNKNOWN',
+      region: options.region,
       estimatedMonthlyCost: estimatedCost,
       tags: options.tags || { Environment: 'Production', ManagedBy: 'AI-MultiCloud-UnifiedAdapter' },
-      securityPosture: 'SECURE',
+      securityPosture: 'NOT_EVALUATED',
       nativeArnOrId: `urn:${prov.toLowerCase()}:compute:${sanitizedName}`
     };
 
@@ -306,7 +306,174 @@ export class UnifiedCloudService {
       `+ Provedor: ${prov}\n` +
       `+ Recurso: ${sanitizedName} (${resourceCandidate.resourceType})\n` +
       `+ Região: ${resourceCandidate.region}\n` +
-      `+ Variação de Custo Mensal: +$${estimatedCost.toFixed(2)} USD\n` +
+      `+ Variação de Custo Mensal: ${estimatedCost === null ? 'NOT_AVAILABLE' : '+
+      `+ Conformidade OPA: ${opaResult.complianceScore}% (${opaResult.violations.length} violações)\n` +
+      `------------------------------------------------------------`;
+
+    if (options.dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        provider: prov,
+        operation: 'CREATE_VM',
+        executionPlan: plan,
+        ...(estimatedCost !== null ? { estimatedCostDelta: estimatedCost } : {}),
+        opaScore: opaResult.complianceScore,
+        message: `Dry-run executado com sucesso. Plano gerado sem efeitos colaterais.`,
+        latencyMs: Date.now() - startTime
+      };
+    }
+
+    if (!opaResult.allowed) {
+      return {
+        success: false,
+        dryRun: false,
+        provider: prov,
+        operation: 'CREATE_VM',
+        executionPlan: plan,
+        opaScore: opaResult.complianceScore,
+        message: `Bloqueado pelo motor de políticas: ${opaResult.violations.map(v => v.message).join(' | ')}`,
+        latencyMs: Date.now() - startTime
+      };
+    }
+
+    // 5. Execute through a real provider adapter. AWS is currently wired; other
+    // providers remain explicitly NOT_CONFIGURED and never report simulated success.
+    if (prov !== 'AWS') {
+      return {
+        success: false,
+        dryRun: false,
+        provider: prov,
+        operation: 'CREATE_VM',
+        executionPlan: plan,
+        estimatedCostDelta: estimatedCost,
+        opaScore: opaResult.complianceScore,
+        message: `REAL_PROVIDER_ADAPTER_NOT_CONFIGURED: no VM was created in ${prov}.`,
+        latencyMs: Date.now() - startTime
+      };
+    }
+
+    try {
+      const created = await breaker.execute(async () => retryWithTenacity(async () => {
+        const client = new EC2Client({ region: options.region || process.env.AWS_REGION || 'us-east-1' });
+        if (!options.image) throw new Error('AWS AMI image is required for real VM creation');
+        const result = await client.send(new RunInstancesCommand({
+          ImageId: options.image,
+          InstanceType: options.instanceType as any,
+          MinCount: 1,
+          MaxCount: 1,
+          TagSpecifications: [{
+            ResourceType: 'instance',
+            Tags: Object.entries(resourceCandidate.tags).map(([Key, Value]) => ({ Key, Value }))
+          }]
+        }));
+        const instance = result.Instances?.[0];
+        if (!instance?.InstanceId) throw new Error('AWS did not return an instance id');
+        return { instanceId: instance.InstanceId, state: instance.State?.Name || 'pending' };
+      }, { maxAttempts: 2 }));
+
+      return {
+        success: true,
+        dryRun: false,
+        provider: prov,
+        operation: 'CREATE_VM',
+        result: {
+          ...resourceCandidate,
+          nativeArnOrId: created.instanceId,
+          status: 'PROVISIONING'
+        },
+        executionPlan: plan,
+        estimatedCostDelta: estimatedCost,
+        opaScore: opaResult.complianceScore,
+        message: `AWS EC2 instance ${created.instanceId} created successfully.`,
+        latencyMs: Date.now() - startTime
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        dryRun: false,
+        provider: prov,
+        operation: 'CREATE_VM',
+        executionPlan: plan,
+        estimatedCostDelta: estimatedCost,
+        opaScore: opaResult.complianceScore,
+        message: `Falha ao provisionar VM em AWS: ${err?.message || String(err)}`,
+        latencyMs: Date.now() - startTime
+      };
+    }
+  }
+
+  /**
+   * Unified VM / Resource Termination (Destructive Operation with Confirmation & Dry-Run)
+   *
+   * Destructive provider execution remains intentionally unavailable until a real
+   * provider lifecycle adapter is implemented. The inventory is never mutated to
+   * represent a cloud-side termination.
+   */
+  static async terminateVm(
+    provider: CloudProvider,
+    resourceId: string,
+    options: { dryRun?: boolean },
+    existingInventory: CloudResource[]
+  ): Promise<ExecutionResult> {
+    const startTime = Date.now();
+    const prov = provider.toUpperCase();
+    const target = existingInventory.find(r => r.id === resourceId || r.name === resourceId);
+
+    if (!target) {
+      return {
+        success: false,
+        dryRun: !!options.dryRun,
+        provider: prov,
+        operation: 'TERMINATE_VM',
+        message: `Recurso ${resourceId} não encontrado no inventário multi-cloud.`,
+        latencyMs: Date.now() - startTime
+      };
+    }
+
+    const plan = `------------------------------------------------------------\\n` +
+      `[PLAN: DESTRUCTIVE ACTION] ${options.dryRun ? '(DRY-RUN MODE - NENHUM RECURSO SERÁ EXCLUÍDO)' : '(EXECUÇÃO DESTRUTIVA)'}\\n` +
+      `- Provedor: ${prov}\\n` +
+      `- Recurso a Destruir: ${target.name} (${target.id})\\n` +
+      `- Tipo: ${target.resourceType} | Região: ${target.region}\\n` +
+      `- Redução de Custo Estimada: -$${target.estimatedMonthlyCost.toFixed(2)} USD/mês\\n` +
+      `------------------------------------------------------------`;
+
+    if (options.dryRun) {
+      return {
+        success: true,
+        dryRun: true,
+        provider: prov,
+        operation: 'TERMINATE_VM',
+        executionPlan: plan,
+        ...(target.estimatedMonthlyCost !== null ? { estimatedCostDelta: -target.estimatedMonthlyCost } : {}),
+        message: 'Dry-run concluído: nenhum recurso foi alterado.',
+        latencyMs: Date.now() - startTime
+      };
+    }
+
+    if (prov !== 'AWS') {
+      return {
+        success: false,
+        dryRun: false,
+        provider: prov,
+        operation: 'TERMINATE_VM',
+        executionPlan: plan,
+        estimatedCostDelta: 0,
+        message: `NOT_IMPLEMENTED: nenhum adapter real de lifecycle está configurado para ${prov}. Nenhum recurso foi alterado.`,
+        latencyMs: Date.now() - startTime
+      };
+    }
+
+    const result = await this.performAwsInstanceAction('TERMINATE', target.nativeArnOrId || target.id, target.region);
+    return {
+      ...result,
+      executionPlan: plan,
+      ...(result.success && target.estimatedMonthlyCost !== null ? { estimatedCostDelta: -target.estimatedMonthlyCost } : {})
+    };
+  }
+}
+ + estimatedCost.toFixed(2) + ' USD'}\n` +
       `+ Conformidade OPA: ${opaResult.complianceScore}% (${opaResult.violations.length} violações)\n` +
       `------------------------------------------------------------`;
 
