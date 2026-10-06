@@ -95,4 +95,22 @@ describe('Unified Multi-Cloud Abstraction Layer Tests', () => {
       assert.ok(probe.message.length > 0);
     }
   });
+  it('não deve inventar custo quando nenhuma estimativa foi fornecida', async () => {
+    const result = await UnifiedCloudService.createVm(
+      {
+        provider: 'GCP',
+        name: 'test-no-cost-estimate',
+        instanceType: 'e2-standard-2',
+        region: 'europe-west1',
+        dryRun: true
+      },
+      mockInventory
+    );
+
+    assert.equal(result.success, true);
+    assert.equal(result.dryRun, true);
+    assert.equal(result.estimatedCostDelta, undefined);
+    assert.match(result.executionPlan || '', /NOT_AVAILABLE/);
+  });
+
 });
