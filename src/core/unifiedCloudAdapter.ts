@@ -359,7 +359,7 @@ export class UnifiedCloudService {
         if (!options.image) throw new Error('AWS AMI image is required for real VM creation');
         const result = await client.send(new RunInstancesCommand({
           ImageId: options.image,
-          InstanceType: options.instanceType,
+          InstanceType: options.instanceType as any,
           MinCount: 1,
           MaxCount: 1,
           TagSpecifications: [{
@@ -377,7 +377,11 @@ export class UnifiedCloudService {
         dryRun: false,
         provider: prov,
         operation: 'CREATE_VM',
-        result: created,
+        result: {
+          ...resourceCandidate,
+          nativeArnOrId: created.instanceId,
+          status: 'PROVISIONING'
+        },
         executionPlan: plan,
         estimatedCostDelta: estimatedCost,
         opaScore: opaResult.complianceScore,
