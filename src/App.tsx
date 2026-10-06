@@ -340,30 +340,28 @@ export default function App() {
   };
 
   // Theme container classes
-  const themeContainerClass = theme === 'light'
-    ? 'bg-slate-100 text-slate-900'
-    : theme === 'midnight'
-    ? 'bg-[#0b0f19] text-slate-100'
-    : 'bg-slate-950 text-slate-100';
+  const themeContainerClass = 'bg-slate-50 text-slate-950';
 
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${themeContainerClass}`}>
       {/* Global Toast Notification */}
       {notification && (
-        <div className="fixed top-4 right-4 z-50 max-w-md animate-fade-in shadow-2xl">
-          <div className={`p-4 rounded-xl border flex items-center justify-between space-x-3 ${
-            notification.type === 'success'
-              ? 'bg-emerald-950 border-emerald-600 text-emerald-200'
-              : notification.type === 'warning'
-              ? 'bg-amber-950 border-amber-600 text-amber-200'
-              : 'bg-slate-900 border-indigo-600 text-slate-200'
-          }`}>
+        <div className="fixed top-4 right-4 z-50 max-w-md animate-fade-in shadow-xl">
+          <div className="p-3 rounded-lg border flex items-center justify-between space-x-3 bg-white border-slate-200 text-slate-900">
             <div className="flex items-center space-x-2">
               {notification.type === 'success' ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
               ) : (
-                <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
               )}
+              <span className="text-xs font-semibold">{notification.text}</span>
+            </div>
+            <button onClick={() => setNotification(null)} className="text-slate-400 hover:text-slate-700 p-1">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
               <span className="text-xs font-semibold">{notification.text}</span>
             </div>
             <button
