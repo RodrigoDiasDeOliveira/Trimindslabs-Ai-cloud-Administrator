@@ -30,8 +30,7 @@ let iacFilesList: IacFile[] = [
     name: 's3-secure-audit-vault.tf',
     type: 'terraform',
     provider: 'AWS',
-    status: 'VALIDATED',
-    lastDeployDate: new Date(Date.now() - 86400000).toISOString(),
+    status: 'DRAFT',
     content: `# AWS S3 Compliant Vault with KMS Server-Side Encryption
 resource "aws_s3_bucket" "audit_vault" {
   bucket = "multicloud-enterprise-audit-vault-2026"
@@ -57,8 +56,7 @@ resource "aws_s3_bucket" "audit_vault" {
     name: 'gke-inference-deploy.yaml',
     type: 'yaml',
     provider: 'GCP',
-    status: 'VALIDATED',
-    lastDeployDate: new Date(Date.now() - 172800000).toISOString(),
+    status: 'DRAFT',
     content: `apiVersion: apps/v1
 kind: Deployment
 metadata:
