@@ -923,6 +923,10 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
 
     let target = resources.find(r => promptLower.includes(r.name.toLowerCase()) || promptLower.includes(r.provider.toLowerCase()));
     if (!target) target = resources[0];
+    if (!target && isDestructive) {
+      tracer.finish();
+      return res.status(404).json({ reply: 'Nenhum recurso real foi descoberto. Execute primeiro um inventário/probe de um provedor.', status: 'NOT_CONFIGURED', invokedTools: [], traceId });
+    }
 
     // Dry Run Simulation Mode for destructive operations
     if (dryRun && isDestructive) {
@@ -1060,6 +1064,8 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
       }
 
       if (geminiResponseText) {
+        // Determine the tool classification; AI text generation does not itself mutate cloud state.
+        // Real provider calls are performed only through explicit adapters above.
         // Determine invoked tool based on context
         let invokedToolName = 'multicloud_inventory_query';
         let provider = 'ALL';
@@ -1085,9 +1091,9 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
           toolName: invokedToolName,
           provider,
           arguments: { query: prompt },
-          result: `Consulta executada em ${provider} com sucesso via modelo ${usedModel}.`,
-          success: true,
-          latencyMs: 124,
+          result: 'AI response generated; no provider mutation was claimed.',
+          success: false,
+          latencyMs: 0,
           traceId
         };
 
@@ -1130,17 +1136,59 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
   }
 
   // Direct Tool Execution after Approval
-app.post('/api/agent/execute', (req: Request, res: Response) => {
-  const { toolName, provider, parameters, resourceId, action } = req.body;
-  res.status(501).json({
+app.post('/api/agent/execute', async (req: Request, res: Response) => {
+  const user = authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
+
+  const { toolName, provider, parameters, resourceId, action } = req.body || {};
+  const target = resources.find(r => r.id === resourceId);
+  if (!target) return res.status(404).json({ error: 'Recurso não encontrado no inventário real' });
+
+  const normalizedAction = String(action || '').toUpperCase();
+  if (!['START','STOP','RESTART','TERMINATE'].includes(normalizedAction)) {
+    return res.status(400).json({ error: 'Ação não suportada' });
+  }
+  if (normalizedAction === 'TERMINATE' && !user.permissions.includes('EXECUTE_CRITICAL')) {
+    return res.status(403).json({ error: 'Ação crítica requer EXECUTE_CRITICAL' });
+  }
+  if (!user.permissions.includes('WRITE')) {
+    return res.status(403).json({ error: 'Permissão WRITE necessária' });
+  }
+  if (parameters?.confirmationToken && !String(parameters.confirmationToken).startsWith('token-')) {
+    return res.status(403).json({ error: 'Confirmation token inválido' });
+  }
+
+  if (target.provider !== 'AWS') {
+    return res.status(501).json({
+      status: 'NOT_CONFIGURED',
+      executionPerformed: false,
+      message: `REAL_PROVIDER_ADAPTER_NOT_CONFIGURED: ${target.provider}`
+    });
+  }
+
+  const result = await UnifiedCloudService.performAwsInstanceAction(
+    normalizedAction as any,
+    target.nativeArnOrId || target.id,
+    target.region
+  );
+  logAudit(user.username, user.role, target.provider, normalizedAction, target.id,
+    normalizedAction === 'TERMINATE' ? 'CRITICAL' : 'MEDIUM',
+    result.success ? 'SUCCESS' : 'FAILED',
+    result.message);
+
+  if (result.success && normalizedAction === 'TERMINATE') {
+    resources = resources.filter(r => r.id !== target.id);
+  }
+
+  return res.status(result.success ? 200 : 502).json({
     toolName: toolName || 'execute_cloud_action',
-    provider: provider || 'UNSPECIFIED',
-    resourceId: resourceId || null,
-    action: action || null,
-    parameters: parameters || {},
-    status: 'NOT_IMPLEMENTED',
-    executionPerformed: false,
-    message: 'Real cloud execution adapter is not configured. No infrastructure state was changed.'
+    provider: target.provider,
+    resourceId: target.id,
+    action: normalizedAction,
+    status: result.success ? 'SUCCESS' : 'FAILED',
+    executionPerformed: result.success,
+    invokedTools: [{ toolName: `aws_ec2_${normalizedAction.toLowerCase()}`, provider: 'AWS', arguments: { instanceId: target.id }, result: result.message, success: result.success }],
+    reply: result.message
   });
 });
 
