@@ -39,7 +39,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
   const t = translations[activeLang];
 
   const [selectedProvider, setSelectedProvider] = useState<string>('AWS');
-  const [defaultRegion, setDefaultRegion] = useState<string>('us-east-1');
+  const [defaultRegion, setDefaultRegion] = useState<string>('');
   const [accountName, setAccountName] = useState<string>('Corporate-Primary');
 
   // AWS Fields
@@ -58,7 +58,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
   // GCP Fields
   const [gcpProjectId, setGcpProjectId] = useState('gcp-multicloud-prod-2026');
   const [gcpServiceAccount, setGcpServiceAccount] = useState('agent-service@gcp-multicloud-prod-2026.iam.gserviceaccount.com');
-  const [gcpZone, setGcpZone] = useState('us-central1-a');
+  const [gcpZone, setGcpZone] = useState('');
 
   // OCI Fields
   const [ociTenancyOcid, setOciTenancyOcid] = useState('ocid1.tenancy.oc1..aaaaaaaaxampletenancy');
@@ -90,18 +90,17 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
   if (!isOpen) return null;
 
   const providersOptions = [
-    { id: 'AWS', name: 'Amazon Web Services', defaultReg: 'us-east-1', badge: 'AWS' },
-    { id: 'AZURE', name: 'Microsoft Azure', defaultReg: 'eastus', badge: 'Azure' },
-    { id: 'GCP', name: 'Google Cloud Platform', defaultReg: 'us-central1', badge: 'GCP' },
-    { id: 'OCI', name: 'Oracle Cloud Infrastructure', defaultReg: 'sa-saopaulo-1', badge: 'OCI' },
-    { id: 'ALIBABA', name: 'Alibaba Cloud / Custom', defaultReg: 'cn-hangzhou', badge: 'Alibaba' },
+    { id: 'AWS', name: 'Amazon Web Services', badge: 'AWS' },
+    { id: 'AZURE', name: 'Microsoft Azure', badge: 'Azure' },
+    { id: 'GCP', name: 'Google Cloud Platform', badge: 'GCP' },
+    { id: 'OCI', name: 'Oracle Cloud Infrastructure', badge: 'OCI' },
+    { id: 'ALIBABA', name: 'Alibaba Cloud / Custom', badge: 'Alibaba' },
   ];
 
   const handleSelectProvider = (provId: string) => {
     setSelectedProvider(provId);
-    const found = providersOptions.find(p => p.id === provId);
-    if (found) {
-      setDefaultRegion(found.defaultReg);
+    if (provId) {
+      setDefaultRegion('');
       if (provId === 'AWS') setComputeInstanceType('t3.large');
       if (provId === 'AZURE') setComputeInstanceType('Standard_D2s_v5');
       if (provId === 'GCP') setComputeInstanceType('e2-standard-4');
@@ -116,6 +115,13 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
     setErrorMsg(null);
 
     try {
+      if (!defaultRegion.trim()) {
+        throw new Error('Informe a região/zona principal da nuvem antes de continuar.');
+      }
+      if (selectedProvider === 'GCP' && !gcpZone.trim()) {
+        throw new Error('Informe a zona do GCP antes de continuar.');
+      }
+
       // Build selected services list
       const selectedServices: string[] = [];
       if (enableCompute) selectedServices.push('Compute & VMs');
@@ -291,7 +297,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
                     }`}
                   >
                     <div className="font-bold text-xs">{p.badge}</div>
-                    <div className="text-[10px] text-slate-400 mt-1 truncate">{p.defaultReg}</div>
+                    <div className="text-[10px] text-slate-400 mt-1 truncate">Selecionar</div>
                   </button>
                 );
               })}
@@ -320,11 +326,13 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-medium">{t.defaultRegion}:</label>
+                <label className="text-slate-300 block mb-1 font-medium">Região / zona principal:</label>
                 <input
                   type="text"
                   value={defaultRegion}
                   onChange={(e) => setDefaultRegion(e.target.value)}
+                  placeholder={selectedProvider === 'GCP' ? 'Ex: europe-west1' : 'Ex: região/zona da sua infraestrutura'}
+                  required
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono"
                 />
               </div>
@@ -432,6 +440,17 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
                       value={gcpServiceAccount}
                       onChange={(e) => setGcpServiceAccount(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono text-[11px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-slate-300 block mb-1 font-medium">GCP Zone:</label>
+                    <input
+                      type="text"
+                      value={gcpZone}
+                      onChange={(e) => setGcpZone(e.target.value)}
+                      placeholder="Ex: europe-west1-b"
+                      required
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono"
                     />
                   </div>
                 </>
