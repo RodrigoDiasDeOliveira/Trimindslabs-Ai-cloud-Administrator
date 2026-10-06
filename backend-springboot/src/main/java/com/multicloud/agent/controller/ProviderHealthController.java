@@ -12,7 +12,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 @RestController
 @RequestMapping("/api/v1/providers")
-@CrossOrigin(origins = "*")
 public class ProviderHealthController {
 
     private final List<ProviderStatusDto> providers = new CopyOnWriteArrayList<>(List.of(
