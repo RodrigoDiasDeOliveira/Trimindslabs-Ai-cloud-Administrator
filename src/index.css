@@ -1,9 +1,31 @@
 @import "tailwindcss";
 
-
-/* Trimindslabs Light Corporate Standard — visual layer only */
-@layer base { html, body { background:#f8fafc; color:#0f172a; } }
+@layer base {
+  html, body { background:#f8fafc; color:#0f172a; font-feature-settings:"cv02","cv03","cv04","cv11"; }
+  ::-webkit-scrollbar { width:6px; height:6px; }
+  ::-webkit-scrollbar-track { background:#f1f5f9; }
+  ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:2px; }
+  ::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
+}
 [class*="bg-black"],[class*="bg-zinc-9"],[class*="bg-slate-9"],[class*="bg-gray-9"],[class*="bg-[#0"],[class*="bg-[#1"]{background-color:#fff !important}
+[class*="bg-slate-8"],[class*="bg-zinc-8"],[class*="bg-gray-8"]{background-color:#f8fafc !important}
+[class*="bg-slate-7"],[class*="bg-zinc-7"],[class*="bg-gray-7"]{background-color:#f1f5f9 !important}
 [class*="text-white"],[class*="text-zinc-100"],[class*="text-zinc-200"]{color:#0f172a !important}
-[class*="text-zinc-300"],[class*="text-zinc-400"]{color:#334155 !important}
+[class*="text-zinc-300"],[class*="text-zinc-400"],[class*="text-slate-300"],[class*="text-slate-400"]{color:#475569 !important}
 [class*="border-white/"],[class*="border-zinc-7"],[class*="border-zinc-8"],[class*="border-slate-7"],[class*="border-slate-8"]{border-color:#e2e8f0 !important}
+[class~="bg-indigo-600"][class~="text-white"],[class~="bg-emerald-600"][class~="text-white"],[class~="bg-blue-600"][class~="text-white"]{color:#fff !important}
+[class~="bg-indigo-600"]{background-color:#2563eb !important}
+[class~="bg-indigo-500"]{background-color:#3b82f6 !important}
+[class~="bg-emerald-600"]{background-color:#059669 !important}
+[class~="bg-emerald-500"]{background-color:#10b981 !important}
+[class*="bg-emerald-950"]{background-color:#f0fdf4 !important}
+[class*="bg-amber-950"]{background-color:#fffbeb !important}
+[class*="bg-rose-950"]{background-color:#fff1f2 !important}
+[class*="bg-indigo-950"]{background-color:#eff6ff !important}
+[class*="bg-purple-900"]{background-color:#faf5ff !important}
+[class*="bg-blue-900"]{background-color:#eff6ff !important}
+[class*="text-indigo-300"],[class*="text-indigo-400"]{color:#1d4ed8 !important}
+[class*="text-emerald-300"],[class*="text-emerald-400"]{color:#15803d !important}
+[class*="text-amber-300"],[class*="text-amber-400"]{color:#b45309 !important}
+[class*="text-rose-300"],[class*="text-rose-400"]{color:#b91c1c !important}
+[class*="rounded-2xl"][class*="shadow-2xl"],[class*="rounded-xl"][class*="shadow-xl"]{box-shadow:0 8px 24px rgba(15,23,42,.08) !important}
