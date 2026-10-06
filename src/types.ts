@@ -32,20 +32,20 @@ export interface CloudResource {
   provider: CloudProvider;
   category: ResourceCategory;
   resourceType: string;
-  status: 'RUNNING' | 'STOPPED' | 'PROVISIONING' | 'DEGRADED';
+  status: 'RUNNING' | 'STOPPED' | 'PROVISIONING' | 'DEGRADED' | 'UNKNOWN';
   region: string;
-  estimatedMonthlyCost: number;
+  estimatedMonthlyCost: number | null;
   tags: Record<string, string>;
-  securityPosture: 'SECURE' | 'WARNING' | 'NON_COMPLIANT';
+  securityPosture: 'SECURE' | 'WARNING' | 'NON_COMPLIANT' | 'REVIEW_REQUIRED' | 'NOT_EVALUATED';
   nativeArnOrId: string;
 }
 
 export interface ProviderStatus {
   provider: CloudProvider;
-  status: 'HEALTHY' | 'CONNECTED' | 'DEGRADED' | 'NOT_CONFIGURED';
-  defaultRegion: string;
+  status: 'HEALTHY' | 'CONNECTED' | 'DEGRADED' | 'NOT_CONFIGURED' | 'FAILED';
+  defaultRegion: string | null;
   activeResourcesCount: number;
-  latencyMs: number;
+  latencyMs: number | null;
   credentialsValid: boolean;
   availableServices: string[];
   circuitBreakerState?: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
