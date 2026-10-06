@@ -459,7 +459,6 @@ export class UnifiedCloudService {
         provider: prov,
         operation: 'TERMINATE_VM',
         executionPlan: plan,
-        estimatedCostDelta: 0,
         message: `NOT_IMPLEMENTED: nenhum adapter real de lifecycle está configurado para ${prov}. Nenhum recurso foi alterado.`,
         latencyMs: Date.now() - startTime
       };
