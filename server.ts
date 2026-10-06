@@ -1108,6 +1108,7 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
       traceId
     });
   }
+});
 
   // Direct Tool Execution after Approval
 app.post('/api/agent/execute', async (req: Request, res: Response) => {
