@@ -27,7 +27,7 @@ export default function App() {
 
   // Theme: dark | midnight | light
   const [theme, setTheme] = useState<AppTheme>(() => {
-    return (localStorage.getItem('multicloud_theme') as AppTheme) || 'dark';
+    return (localStorage.getItem('multicloud_theme') as AppTheme) || 'light';
   });
 
   // Language: pt | en | es
@@ -41,14 +41,7 @@ export default function App() {
     if (saved) {
       try { return JSON.parse(saved); } catch (e) {}
     }
-    // Default logged-in user is Rodrigo Dias (admin) as requested
-    return {
-      username: 'admin',
-      displayName: 'Rodrigo Dias (Administrador Cloud)',
-      role: 'ROLE_ADMIN',
-      token: 'jwt-bearer-admin-production-token-2026',
-      permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'BLAST_RADIUS_APPROVE', 'MANAGE_CLOUDS', 'EXPORT_AUDIT']
-    };
+    return null;
   });
 
   // Modal States
@@ -116,6 +109,20 @@ export default function App() {
     });
     setTimeout(() => setNotification(null), 3000);
   };
+
+  useEffect(() => {
+    if (!currentUser?.token) return;
+    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${currentUser.token}` } })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Session expired');
+        const verified = await res.json();
+        setCurrentUser((prev) => prev ? { ...prev, ...verified } : prev);
+      })
+      .catch(() => {
+        setCurrentUser(null);
+        localStorage.removeItem('multicloud_user');
+      });
+  }, []);
 
   // Fetch initial data
   const fetchData = async () => {
@@ -474,7 +481,8 @@ export default function App() {
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}
         onLoginSuccess={handleLoginSuccess}
-        language={language}
+        currentLanguage={language}
+        theme={theme}
       />
 
       {/* Add Cloud Provider Modal */}
