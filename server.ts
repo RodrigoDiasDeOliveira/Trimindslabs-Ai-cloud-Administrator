@@ -225,10 +225,10 @@ function logAudit(
 }
 
 // ----------------------------------------------------
- // AUTHENTICATION ENDPOINTS
- // Production credentials come only from environment/secret management.
- // A single demo profile is available only when DEMO_MODE=true.
- // ----------------------------------------------------
+// AUTHENTICATION ENDPOINTS
+// Temporary bootstrap credential for the current production validation phase.
+// Replace with Secret Manager-backed credentials before broader external use.
+// ----------------------------------------------------
 type SessionUser = {
   username: string;
   displayName: string;
@@ -237,7 +237,8 @@ type SessionUser = {
 };
 
 const sessions = new Map<string, SessionUser>();
-const DEMO_MODE = process.env.DEMO_MODE === 'true';
+const ADMIN_USERNAME = 'admin';
+const ADMIN_PASSWORD = 'agentic';
 
 const ROLE_PROFILES: Record<string, SessionUser> = {
   admin: { username: 'admin', displayName: 'Cloud Administrator', role: 'ROLE_ADMIN', permissions: ['READ','WRITE','EXECUTE_CRITICAL','BLAST_RADIUS_APPROVE','MANAGE_CLOUDS','EXPORT_AUDIT','IAC_DEPLOY','BACKUP_OPERATE','POLICY_MANAGE'] },
@@ -260,33 +261,11 @@ function authenticatedUser(req: Request): SessionUser | null {
 app.post('/api/auth/login', (req: Request, res: Response) => {
   const { username, password } = req.body || {};
   const u = String(username || '').trim().toLowerCase();
-  const configured = [
-    ['ADMIN_USERNAME','ADMIN_PASSWORD','admin'],
-    ['DEV_USERNAME','DEV_PASSWORD','dev'],
-    ['OBSERVER_USERNAME','OBSERVER_PASSWORD','observer']
-  ] as const;
-
-  for (const [userKey, passKey, profileKey] of configured) {
-    const expectedUser = process.env[userKey];
-    const expectedPass = process.env[passKey];
-    if (expectedUser && expectedPass && u === expectedUser.toLowerCase() && password === expectedPass) {
-      const profile = ROLE_PROFILES[profileKey];
-      const token = issueSession(profile);
-      logAudit(profile.username, profile.role, 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Authentication succeeded.');
-      return res.json({ ...profile, token });
-    }
-  }
-
-  if (DEMO_MODE && u === 'demo' && password === 'demo') {
-    const profile: SessionUser = {
-      username: 'demo',
-      displayName: 'Demonstration Operator',
-      role: 'ROLE_OBSERVER',
-      permissions: ['READ','EXPORT_AUDIT']
-    };
+  if (u === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    const profile = ROLE_PROFILES.admin;
     const token = issueSession(profile);
-    logAudit(profile.username, profile.role, 'DEMO', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Demo session started. No provider mutation is enabled by the demo profile.');
-    return res.json({ ...profile, token, demo: true });
+    logAudit(profile.username, profile.role, 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Authentication succeeded.');
+    return res.json({ ...profile, token });
   }
 
   logAudit(u || 'unknown', 'UNKNOWN', 'SYSTEM', 'LOGIN_FAILED', 'SESSION', 'MEDIUM', 'FAILED', 'Authentication failed.');
