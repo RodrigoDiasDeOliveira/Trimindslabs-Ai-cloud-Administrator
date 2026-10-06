@@ -30,8 +30,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   theme
 }) => {
   const t = translations[currentLanguage];
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -65,31 +65,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   const quickUsers = [
     {
-      id: 'admin',
-      label: 'Admin (Total)',
-      role: 'ROLE_ADMIN',
-      desc: t.roleAdminDesc,
-      u: 'admin',
-      p: 'admin123',
-      color: 'border-indigo-500 bg-indigo-500/10 text-indigo-300'
-    },
-    {
-      id: 'dev',
-      label: 'DevOps (Standard)',
-      role: 'ROLE_DEV',
-      desc: t.roleDevDesc,
-      u: 'dev',
-      p: 'dev123',
-      color: 'border-blue-500 bg-blue-500/10 text-blue-300'
-    },
-    {
-      id: 'observer',
-      label: 'Observer (Read-Only)',
+      id: 'demo',
+      label: 'Demo (Simulação)',
       role: 'ROLE_OBSERVER',
-      desc: t.roleObserverDesc,
-      u: 'observer',
-      p: 'observer123',
-      color: 'border-amber-500 bg-amber-500/10 text-amber-300'
+      desc: 'Único perfil de demonstração; somente leitura e sem mutações de cloud.',
+      u: 'demo',
+      p: 'demo',
+      color: 'border-slate-400 bg-slate-100 text-slate-700'
     }
   ];
 
@@ -135,7 +117,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         {/* 1-Click Profile Selectors for Fast Verification */}
         <div className="mb-5 space-y-2">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-            Acesso Rápido por Perfil (1-Clique):
+            Exemplo de demonstração (opcional):
           </span>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {quickUsers.map((item) => (
