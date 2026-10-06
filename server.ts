@@ -176,7 +176,7 @@ const initialProviders = [
     status: 'NOT_CONFIGURED' as const,
     defaultRegion: null,
     activeResourcesCount: 0,
-    latencyMs: 0,
+    latencyMs: null,
     credentialsValid: false,
     availableServices: ['Virtual Machines', 'Blob Storage', 'Azure SQL', 'VNet', 'Entra ID']
   },
@@ -185,7 +185,7 @@ const initialProviders = [
     status: 'NOT_CONFIGURED' as const,
     defaultRegion: null,
     activeResourcesCount: 0,
-    latencyMs: 0,
+    latencyMs: null,
     credentialsValid: false,
     availableServices: ['Compute Engine', 'Cloud Storage', 'Cloud SQL', 'GKE Autopilot', 'Cloud KMS']
   },
@@ -194,7 +194,7 @@ const initialProviders = [
     status: 'NOT_CONFIGURED' as const,
     defaultRegion: null,
     activeResourcesCount: 0,
-    latencyMs: 0,
+    latencyMs: null,
     credentialsValid: false,
     availableServices: ['Compute ARM64', 'Object Storage', 'Autonomous DB', 'VCN', 'Vault']
   }
@@ -331,7 +331,7 @@ app.get('/api/providers/AWS/instances', async (req: Request, res: Response) => {
       resourceType: item.instanceType || 'EC2',
       status: item.state === 'running' ? 'RUNNING' : item.state === 'stopped' ? 'STOPPED' : 'DEGRADED',
       region: region || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
-      estimatedMonthlyCost: 0,
+      estimatedMonthlyCost: null,
       tags: item.tags || {},
       securityPosture: 'SECURE',
       nativeArnOrId: item.instanceId
@@ -449,7 +449,7 @@ app.post('/api/providers/add', (req: Request, res: Response) => {
     status: 'NOT_CONFIGURED',
     defaultRegion: defaultRegion || 'global',
     activeResourcesCount: resources.filter(r => r.provider === provUpper).length,
-    latencyMs: 0,
+    latencyMs: null,
     credentialsValid: false,
     availableServices: services
   };
