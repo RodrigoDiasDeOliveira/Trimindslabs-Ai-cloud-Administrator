@@ -29,27 +29,27 @@ public class SecurityConfig {
     }
 
     @Bean
-    public UserDetailsService userDetailsService(PasswordEncoder encoder) {
-        // Três tipos de usuários: adm (ROLE_ADMIN), dev (ROLE_DEV), observer (ROLE_OBSERVER)
-        UserDetails admin = User.builder()
-                .username("admin")
-                .password(encoder.encode("admin123"))
-                .roles("ADMIN")
-                .build();
+    public UserDetailsService userDetailsService() {
+        java.util.List<UserDetails> users = new java.util.ArrayList<>();
+        addUser(users, "ADMIN_USERNAME", "ADMIN_PASSWORD_BCRYPT", "ADMIN");
+        addUser(users, "DEV_USERNAME", "DEV_PASSWORD_BCRYPT", "DEV");
+        addUser(users, "OBSERVER_USERNAME", "OBSERVER_PASSWORD_BCRYPT", "OBSERVER");
+        if ("true".equalsIgnoreCase(System.getenv("DEMO_MODE"))) {
+            users.add(User.builder()
+                    .username("demo")
+                    .password("{noop}demo")
+                    .roles("OBSERVER")
+                    .build());
+        }
+        return new InMemoryUserDetailsManager(users);
+    }
 
-        UserDetails dev = User.builder()
-                .username("dev")
-                .password(encoder.encode("dev123"))
-                .roles("DEV")
-                .build();
-
-        UserDetails observer = User.builder()
-                .username("observer")
-                .password(encoder.encode("observer123"))
-                .roles("OBSERVER")
-                .build();
-
-        return new InMemoryUserDetailsManager(admin, dev, observer);
+    private void addUser(java.util.List<UserDetails> users, String usernameKey, String passwordKey, String role) {
+        String username = System.getenv(usernameKey);
+        String passwordHash = System.getenv(passwordKey);
+        if (username != null && !username.isBlank() && passwordHash != null && !passwordHash.isBlank()) {
+            users.add(User.builder().username(username).password(passwordHash).roles(role).build());
+        }
     }
 
     @Bean
@@ -59,7 +59,8 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/v1/auth/**").permitAll()
-                .requestMatchers("/api/v1/providers/**", "/api/v1/resources/**", "/api/v1/agent/**", "/actuator/**").permitAll()
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/api/v1/providers/**", "/api/v1/resources/**", "/api/v1/agent/**").authenticated()
                 .anyRequest().authenticated()
             );
         return http.build();
@@ -68,7 +69,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("*"));
+        configuration.setAllowedOrigins(List.of("http://localhost:3000", "http://localhost:8080"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
