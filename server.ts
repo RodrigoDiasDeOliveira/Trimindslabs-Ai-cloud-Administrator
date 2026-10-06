@@ -665,63 +665,43 @@ app.post('/api/iac/dry-run', (req: Request, res: Response) => {
 });
 
 app.post('/api/iac/deploy', (req: Request, res: Response) => {
-  const { id, content, fileName, name, provider, userRole } = req.body;
+  const user = authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
+  if (!user.permissions.includes('IAC_DEPLOY')) return res.status(403).json({ error: 'Permissão IAC_DEPLOY necessária' });
+
+  const { id, content, fileName, name, provider } = req.body || {};
   const effectiveName = fileName || name || 'main.tf';
-  let targetFile = iacFilesList.find(f => f.id === id);
-  if (!targetFile) {
-    targetFile = {
-      id: id || `iac-${Date.now().toString().slice(-4)}`,
-      name: effectiveName,
-      type: (effectiveName.endsWith('.yaml') ? 'yaml' : effectiveName.endsWith('.json') ? 'json' : 'terraform') as any,
-      provider: (provider || 'AWS').toUpperCase(),
-      content: content || '',
-      status: 'DRAFT'
-    };
-    iacFilesList.push(targetFile);
-  } else if (content) {
-    targetFile.content = content;
-  }
-
-  const opaResult = OpaPolicyEngine.evaluateIacCode(targetFile);
-  if (!opaResult.allowed) {
-    res.status(403).json({
-      error: 'Deploy bloqueado pelo motor OPA. Existem violações críticas de segurança.',
-      violations: opaResult.violations
-    });
-    return;
-  }
-
-  targetFile.status = 'DEPLOYED';
-  targetFile.lastDeployDate = new Date().toISOString();
-
-  // Create new active resource in inventory
-  const newRes: CloudResource = {
-    id: `res-${targetFile.provider.toLowerCase()}-iac-${Date.now().toString().slice(-4)}`,
-    name: targetFile.name.replace(/\.[^/.]+$/, ''),
-    provider: targetFile.provider as any,
-    category: targetFile.type === 'yaml' ? 'COMPUTE' : 'STORAGE',
-    resourceType: targetFile.type === 'yaml' ? 'GKE Deployment' : 'S3 / KMS Vault',
-    status: 'RUNNING',
-    region: 'us-east-1',
-    estimatedMonthlyCost: 35.00,
-    tags: { Environment: 'Production', DeployedBy: 'IaC-Studio', Engine: 'Terraform' },
-    securityPosture: 'SECURE',
-    nativeArnOrId: `urn:${targetFile.provider.toLowerCase()}:iac:${targetFile.name}`
+  const targetFile = iacFilesList.find(f => f.id === id);
+  const candidate: IacFile = targetFile || {
+    id: id || `iac-${Date.now().toString().slice(-4)}`,
+    name: effectiveName,
+    type: effectiveName.endsWith('.yaml') || effectiveName.endsWith('.yml') ? 'yaml' : effectiveName.endsWith('.json') ? 'json' : 'terraform',
+    provider: (provider || 'AWS').toUpperCase(),
+    content: content || '',
+    status: 'DRAFT'
   };
-  resources.push(newRes);
 
-  const user = (req.headers['x-user-email'] as string) || (userRole ? `${userRole.toLowerCase()}@multicloud.corp` : 'admin@multicloud.corp');
-  const role = (req.headers['x-user-role'] as string) || userRole || 'ROLE_ADMIN';
-  const logEntry = logAudit(user, role, targetFile.provider, 'DEPLOY_IAC_CONFIG', targetFile.name, 'MEDIUM', 'SUCCESS', `Deploy de infraestrutura IaC ${targetFile.name} executado com sucesso.`);
+  if (content) candidate.content = content;
+  const syntax = InputValidator.validateIacContent(candidate.content, candidate.type);
+  const opa = OpaPolicyEngine.evaluateIacCode(candidate);
+  if (!syntax.valid || !opa.allowed) {
+    return res.status(403).json({ status: 'BLOCKED_BY_GUARDRAIL', syntax, opa });
+  }
 
-  res.json({
-    success: true,
-    message: `Configuração ${targetFile.name} implantada com sucesso no provedor ${targetFile.provider}.`,
-    deployedResource: newRes,
-    file: targetFile,
-    auditSignature: logEntry.signature
+  // Validation is real. Applying infrastructure is deliberately refused until a
+  // real Terraform/native provider executor is configured.
+  logAudit(user.username, user.role, candidate.provider, 'DEPLOY_IAC_REQUEST', candidate.name, 'MEDIUM', 'BLOCKED_BY_GUARDRAIL',
+    'Validated IaC received but no real infrastructure executor is configured; no resource was created.');
+
+  return res.status(501).json({
+    status: 'NOT_CONFIGURED',
+    executionPerformed: false,
+    message: 'IaC validation succeeded, but no real Terraform/native provider executor is configured. No infrastructure state was changed.',
+    file: candidate,
+    opa
   });
 });
+
 
 // ----------------------------------------------------
 // MULTI-CLOUD BACKUP & DISASTER RECOVERY (DR)
