@@ -153,9 +153,9 @@ O arquivo de configuração está disponível em `/mcp/multicloud-mcp.json`.
 
 | Usuário | Senha Padrão | Role | Permissões & Restrições |
 |---|---|---|---|
-| **admin** | `admin123` | `ROLE_ADMIN` | Acesso total irrestrito: aprovação de Blast Radius, parada/início de recursos críticos, cadastro de novas nuvens e exportação de auditoria. |
-| **dev** | `dev123` | `ROLE_DEV` | Acesso operacional padrão: consulta de inventário, solicitação de orquestrações e ações de desenvolvimento. Requer aprovação de Blast Radius para operações de alto impacto. |
-| **observer** | `observer123` | `ROLE_OBSERVER` | Acesso estritamente somente leitura (*Read-Only*): visualização de dashboards, custos e inventário. Todas as ações destrutivas ou aprovações são bloqueadas pelo sistema. |
+| **admin** | `environment-managed credentials` | `ROLE_ADMIN` | Acesso total irrestrito: aprovação de Blast Radius, parada/início de recursos críticos, cadastro de novas nuvens e exportação de auditoria. |
+| **dev** | `environment-managed credentials` | `ROLE_DEV` | Acesso operacional padrão: consulta de inventário, solicitação de orquestrações e ações de desenvolvimento. Requer aprovação de Blast Radius para operações de alto impacto. |
+| **observer** | `environment-managed credentials` | `ROLE_OBSERVER` | Acesso estritamente somente leitura (*Read-Only*): visualização de dashboards, custos e inventário. Todas as ações destrutivas ou aprovações são bloqueadas pelo sistema. |
 | **finops** | `finops123` | `ROLE_FINOPS` | Especialista em custos: visualização consolidada de faturamento e recomendações de Savings Plans. |
 
 ---
@@ -189,3 +189,13 @@ cd backend-springboot
 mvn clean package -DskipTests
 java -jar target/ai-multicloud-agent-backend-1.0.0.jar
 ```
+
+
+## Operational readiness (2026-10)
+- Authentication is session-based and credentials are supplied through environment/secret management; no default administrator session is embedded in the frontend.
+- A single optional demonstration profile (`demo/demo`) exists only when `DEMO_MODE=true`, and is read-only.
+- AWS STS/EC2 discovery and AWS EC2 START/STOP/RESTART/TERMINATE lifecycle actions use real provider APIs.
+- Azure, GCP and OCI are reported as `NOT_CONFIGURED` until their real adapters and credentials are connected.
+- IaC validation and policy evaluation are operational. IaC deployment returns `NOT_CONFIGURED` until a real Terraform/native executor is configured; it never fabricates a deployed resource.
+- Cross-cloud backup/DR operations are `NOT_CONFIGURED` until real storage/provider adapters are connected.
+- Dry-run remains the single explicit simulation/example path; it never mutates provider state.
