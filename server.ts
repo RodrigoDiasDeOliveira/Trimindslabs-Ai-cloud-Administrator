@@ -13,6 +13,8 @@ import { InputValidator } from './src/core/inputValidator';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import { EC2Client, DescribeInstancesCommand } from '@aws-sdk/client-ec2';
 import { CloudResource, AuditLog, IacFile, ProviderStatus } from './src/types';
+import { SimpleAuthenticationDetailsProvider, Region } from 'oci-common';
+import { IdentityClient } from 'oci-identity';
 
 dotenv.config();
 
@@ -404,7 +406,98 @@ app.post('/api/providers/connect', async (req: Request, res: Response) => {
     }
 
     if (prov === 'OCI') {
-      return res.status(501).json({ status: 'NOT_IMPLEMENTED', provider: 'OCI', credentialsValid: false, message: 'OCI ainda não possui um adapter de autenticação real neste build. Nenhuma conexão ou recurso foi registrado.' });
+      const tenancyOcid = String(credentials?.tenancyOcid || '').trim();
+      const userOcid = String(credentials?.userOcid || '').trim();
+      const fingerprint = String(credentials?.fingerprint || '').trim();
+      const privateKey = String(credentials?.privateKey || '');
+      const passphrase = String(credentials?.passphrase || '');
+      const regionId = String(defaultRegion).trim();
+
+      if (!tenancyOcid || !userOcid || !fingerprint || !privateKey) {
+        return res.status(400).json({
+          status: 'NOT_CONFIGURED',
+          provider: prov,
+          credentialsValid: false,
+          message: 'OCI Tenancy OCID, User OCID, Fingerprint e Private Key são obrigatórios para uma conexão real.'
+        });
+      }
+
+      try {
+        const provider = new SimpleAuthenticationDetailsProvider(
+          tenancyOcid,
+          userOcid,
+          fingerprint,
+          privateKey,
+          passphrase || null,
+          Region.fromRegionId(regionId)
+        );
+        const identityClient = new IdentityClient({ authenticationDetailsProvider: provider });
+        identityClient.regionId = regionId;
+
+        const identity = await identityClient.getUser({ userId: userOcid });
+        const resourcesFound: any[] = [];
+
+        const value: ProviderStatus = {
+          provider: 'OCI',
+          status: 'CONNECTED',
+          defaultRegion: regionId,
+          activeResourcesCount: 0,
+          latencyMs: Date.now() - startedAt,
+          credentialsValid: true,
+          availableServices: scopes,
+          lastProbeCheck: {
+            probeType: 'identity.getUser',
+            targetEndpoint: `https://identity.${regionId}.oci.oraclecloud.com`,
+            statusCode: 200,
+            success: true,
+            latencyMs: Date.now() - startedAt,
+            checkedAt: new Date().toISOString()
+          }
+        };
+
+        const pidx = providersList.findIndex(p => p.provider === 'OCI');
+        if (pidx >= 0) providersList[pidx] = { ...providersList[pidx], ...value };
+
+        resources = resources.filter(r => r.provider !== 'OCI');
+
+        logAudit(
+          user.username,
+          user.role,
+          'OCI',
+          'CONNECT_CLOUD_PROVIDER',
+          userOcid,
+          'LOW',
+          'SUCCESS',
+          'OCI API signing credentials verified with Identity getUser; no resources were fabricated.'
+        );
+
+        return res.json({
+          success: true,
+          status: 'CONNECTED',
+          provider: value,
+          authentication: {
+            verified: true,
+            method: 'OCI_API_SIGNING_KEY',
+            tenancyOcid,
+            userOcid,
+            fingerprint
+          },
+          identity: {
+            id: identity.user?.id || userOcid,
+            name: identity.user?.name,
+            lifecycleState: identity.user?.lifecycleState
+          },
+          discoveredResources: resourcesFound,
+          discoveryErrors: scopes.length ? ['OCI identity validation is implemented; selected resource discovery is not yet implemented.'] : []
+        });
+      } catch (err: any) {
+        return res.status(502).json({
+          status: 'FAILED',
+          provider: 'OCI',
+          credentialsValid: false,
+          message: `OCI authentication failed: ${err?.message || String(err)}`
+        });
+      }
     }
 
     // GCP uses the Cloud Run runtime service identity; the requested service-account field is validated against it.
@@ -414,7 +507,17 @@ app.post('/api/providers/connect', async (req: Request, res: Response) => {
     const identityRes = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email', { headers: mh });
     const tokenRes = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', { headers: mh });
     if (!identityRes.ok || !tokenRes.ok) return res.status(503).json({ status: 'FAILED', provider: 'GCP', credentialsValid: false, message: 'Runtime GCP identity/token indisponível. Nenhuma conexão foi registrada.' });
-    const runtimeServiceAccount = (await identityRes.text()).trim(); const tokenData: any = await tokenRes.json(); const authHeaders = { Authorization: 'Bearer ' + tokenData.access_token };
+    const runtimeServiceAccount = (await identityRes.text()).trim();
+    if (runtimeServiceAccount !== serviceAccount) {
+      return res.status(400).json({
+        status: 'FAILED',
+        provider: 'GCP',
+        credentialsValid: false,
+        message: `O Service Account informado não corresponde à identidade real do runtime GCP (${runtimeServiceAccount}).`
+      });
+    }
+    const tokenData: any = await tokenRes.json();
+    const authHeaders = { Authorization: 'Bearer ' + tokenData.access_token };
     const projectRes = await fetch('https://cloudresourcemanager.googleapis.com/v1/projects/' + encodeURIComponent(projectId), { headers: authHeaders });
     const projectBody = await projectRes.text(); let projectData: any = {}; try { projectData = JSON.parse(projectBody); } catch {}
     if (!projectRes.ok) return res.status(502).json({ status: 'FAILED', provider: 'GCP', credentialsValid: false, message: 'GCP project validation failed: ' + (projectData?.error?.message || projectBody || ('HTTP ' + projectRes.status)) });
@@ -444,20 +547,18 @@ app.post('/api/providers/add', (req: Request, res: Response) => {
   const provUpper = String(provider).toUpperCase().trim();
   const services = Array.isArray(selectedServices) ? selectedServices : [];
   const idx = providersList.findIndex(p => p.provider === provUpper);
-  const value: ProviderStatus = {
+  return res.status(409).json({
+    success: false,
     provider: provUpper,
     status: 'NOT_CONFIGURED',
-    defaultRegion: defaultRegion || 'global',
-    activeResourcesCount: resources.filter(r => r.provider === provUpper).length,
-    latencyMs: null,
-    credentialsValid: false,
-    availableServices: services
-  };
-  if (idx >= 0) providersList[idx] = { ...providersList[idx], ...value };
-  else providersList.push(value);
-
-  logAudit(user.username, user.role, provUpper, 'ADD_CLOUD_PROVIDER', provUpper, 'MEDIUM', 'SUCCESS', 'Provider registration stored without claiming connectivity or provisioning.');
-  return res.json({ success: true, provider: value, addedResourcesCount: 0 });
+    message: 'O cadastro de uma nuvem exige validação real. Use /api/providers/connect; nenhum provider é registrado por este endpoint.'
+  });
+  return res.status(409).json({
+    success: false,
+    provider: provUpper,
+    status: 'NOT_CONFIGURED',
+    message: 'O cadastro de uma nuvem exige validação real. Use /api/providers/connect; nenhum provider é registrado por este endpoint.'
+  });
 });
 
 // Resources List and Filtering
