@@ -332,7 +332,7 @@ export class UnifiedCloudService {
         operation: 'CREATE_VM',
         executionPlan: plan,
         opaScore: opaResult.complianceScore,
-        message: `Bloqueado pelo motor OPA: ${opaResult.violations.map(v => v.message).join(' | ')}`,
+        message: `Bloqueado pelo motor de políticas: ${opaResult.violations.map(v => v.message).join(' | ')}`,
         latencyMs: Date.now() - startTime
       };
     }
