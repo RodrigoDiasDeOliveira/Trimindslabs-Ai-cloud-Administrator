@@ -306,7 +306,7 @@ export class UnifiedCloudService {
       `+ Provedor: ${prov}\n` +
       `+ Recurso: ${sanitizedName} (${resourceCandidate.resourceType})\n` +
       `+ Região: ${resourceCandidate.region}\n` +
-      `+ Variação de Custo Mensal: ${estimatedCost === null ? 'NOT_AVAILABLE' : '+
+      `+ Variação de Custo Mensal: ${estimatedCost === null ? 'NOT_AVAILABLE' : '+$' + estimatedCost.toFixed(2) + ' USD'}\n` +
       `+ Conformidade OPA: ${opaResult.complianceScore}% (${opaResult.violations.length} violações)\n` +
       `------------------------------------------------------------`;
 
