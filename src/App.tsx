@@ -261,10 +261,11 @@ export default function App() {
       });
 
       const data = await response.json();
+      const succeeded = response.ok && data.executionPerformed === true && data.status === 'SUCCESS';
 
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === messageId ? { ...m, status: 'SUCCESS' } : m
+          m.id === messageId ? { ...m, status: succeeded ? 'SUCCESS' : 'FAILED' } : m
         )
       );
 
@@ -273,14 +274,14 @@ export default function App() {
         {
           id: `agent-exec-${Date.now()}`,
           sender: 'agent',
-          text: data.reply,
+          text: data.reply || data.message || 'Operação não executada.',
           timestamp: new Date().toISOString(),
-          status: 'SUCCESS',
+          status: succeeded ? 'SUCCESS' : 'FAILED',
           invokedTools: data.invokedTools
         }
       ]);
 
-      fetchData();
+      if (succeeded) fetchData();
     } catch (err: any) {
       console.error('Error executing approved action:', err);
     } finally {
