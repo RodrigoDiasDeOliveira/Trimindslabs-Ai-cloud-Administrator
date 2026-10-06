@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { randomUUID } from 'crypto';
 import path from 'path';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
@@ -270,7 +271,7 @@ const ROLE_PROFILES: Record<string, SessionUser> = {
 };
 
 function issueSession(user: SessionUser): string {
-  const token = `session-${crypto.randomUUID()}`;
+  const token = `session-${randomUUID()}`;
   sessions.set(token, user);
   return token;
 }
