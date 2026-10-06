@@ -1099,6 +1099,17 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
     });
   }
 
+  } catch (err: any) {
+    console.error('Agent chat orchestration failed:', err);
+    tracer.finish();
+    return res.status(500).json({
+      reply: 'Falha interna na orquestração do agente. Nenhuma operação de infraestrutura foi confirmada como executada.',
+      status: 'FAILED',
+      invokedTools: [],
+      traceId
+    });
+  }
+
   // Direct Tool Execution after Approval
 app.post('/api/agent/execute', async (req: Request, res: Response) => {
   const user = authenticatedUser(req);
