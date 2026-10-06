@@ -333,7 +333,7 @@ app.get('/api/providers/AWS/instances', async (req: Request, res: Response) => {
       region: region || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
       estimatedMonthlyCost: null,
       tags: item.tags || {},
-      securityPosture: 'SECURE',
+      securityPosture: 'NOT_EVALUATED',
       nativeArnOrId: item.instanceId
     }));
   }
