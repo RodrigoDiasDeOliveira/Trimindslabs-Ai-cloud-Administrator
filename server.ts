@@ -769,14 +769,14 @@ app.get('/api/audit/verify', (req: Request, res: Response) => {
 app.get('/api/reports/executive', (req: Request, res: Response) => {
   const totalCost = resources.reduce((acc, curr) => acc + curr.estimatedMonthlyCost, 0);
   const secureCount = resources.filter(r => r.securityPosture === 'SECURE').length;
-  const complianceScore = Math.round((secureCount / resources.length) * 100);
+  const complianceScore = resources.length === 0 ? 0 : Math.round((secureCount / resources.length) * 100);
   const integrity = AuditCryptoChain.verifyChainIntegrity(auditLogs);
   const backupMetrics = BackupDrManager.getMetrics();
 
   const reportData = {
     reportId: `REP-EXEC-${Date.now().toString().slice(-6)}`,
     generatedAt: new Date().toISOString(),
-    status: 'OFFICIAL_AUDITED',
+    status: auditLogs.length > 0 ? 'GENERATED_FROM_RUNTIME_DATA' : 'NOT_CONFIGURED',
     overview: {
       totalResources: resources.length,
       activeCloudsCount: providersList.filter(p => p.status === 'CONNECTED').length,
@@ -789,7 +789,7 @@ app.get('/api/reports/executive', (req: Request, res: Response) => {
       azure: resources.filter(r => r.provider === 'AZURE').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2),
       gcp: resources.filter(r => r.provider === 'GCP').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2),
       oci: resources.filter(r => r.provider === 'OCI').reduce((a, b) => a + b.estimatedMonthlyCost, 0).toFixed(2),
-      potentialSavingsAnnualUsd: '297.60'
+      potentialSavingsAnnualUsd: 'NOT_CONFIGURED'
     },
     disasterRecoverySla: {
       totalProtectedDataGb: backupMetrics.totalDataGb,
@@ -797,13 +797,13 @@ app.get('/api/reports/executive', (req: Request, res: Response) => {
       successRate: `${backupMetrics.successRate}%`,
       achievedAverageRpo: `${backupMetrics.avgRpoHours} horas`,
       achievedAverageRto: `${backupMetrics.avgRtoMinutes} minutos`,
-      crossCloudReplication: 'Ativa entre AWS, Azure, GCP e OCI'
+      crossCloudReplication: backupMetrics.crossCloudEnabled ? 'CONFIGURED' : 'NOT_CONFIGURED'
     },
     governancePolicies: [
-      { name: 'Criptografia em Repouso Mandatória (CMEK / KMS)', status: 'COMPLIANT', score: 100 },
-      { name: 'Bloqueio de SSH/RDP Aberto (0.0.0.0/0)', status: 'COMPLIANT', score: 100 },
-      { name: 'Padrão Corporativo de Tagging & Owner', status: 'COMPLIANT', score: 98 },
-      { name: 'Prevenção de Buckets Públicos', status: 'COMPLIANT', score: 100 }
+      { name: 'Criptografia em Repouso Mandatória (CMEK / KMS)', status: resources.length ? 'REVIEW_REQUIRED' : 'NOT_CONFIGURED', score: 0 },
+      { name: 'Bloqueio de SSH/RDP Aberto (0.0.0.0/0)', status: resources.length ? 'REVIEW_REQUIRED' : 'NOT_CONFIGURED', score: 0 },
+      { name: 'Padrão Corporativo de Tagging & Owner', status: resources.length ? 'REVIEW_REQUIRED' : 'NOT_CONFIGURED', score: 0 },
+      { name: 'Prevenção de Buckets Públicos', status: resources.length ? 'REVIEW_REQUIRED' : 'NOT_CONFIGURED', score: 0 }
     ],
     verifiedAuditRecordsCount: auditLogs.length,
     latestSignatures: auditLogs.slice(0, 5).map(l => ({ id: l.id, user: l.user, action: l.action, signature: l.signature }))
@@ -821,7 +821,7 @@ app.get('/api/reports/executive', (req: Request, res: Response) => {
 - **Provedores Ativos Conectados:** ${providersList.filter(p => p.status === 'CONNECTED').length}
 - **Total de Recursos Gerenciados:** ${resources.length}
 - **Gasto Mensal Projetado:** $${totalCost.toFixed(2)} USD
-- **Economia Anual Identificada (FinOps):** $297.60 USD
+- **Economia Anual Identificada (FinOps):** Não configurada — nenhuma economia é afirmada sem dados reais de custo.
 
 ## 2. Distribuição FinOps por Provedor
 - **AWS:** $${reportData.finOpsBreakdown.aws} USD/mês
@@ -978,7 +978,7 @@ app.post('/api/agent/chat', async (req: Request, res: Response) => {
       let usedModel = 'gemini-3.8-flash';
 
       const systemInstruction = `Você é o AI MultiCloud Agent (Produção 2026), um orquestrador sênior especialista em AWS, Azure, Google Cloud (GCP) e Oracle Cloud (OCI).
-Você gerencia infraestrutura com alta responsabilidade, aderindo às políticas de governança CIS, OPA Gatekeeper e finanças em nuvem (FinOps).
+Você analisa e orquestra infraestrutura com alta responsabilidade, aderindo às políticas de governança CIS, ao motor de políticas interno e às práticas de FinOps. A execução de infraestrutura só ocorre através de adapters reais explicitamente configurados.
 Inventário atual em memória:
 ${JSON.stringify(resources, null, 2)}
 
@@ -1041,31 +1041,24 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
         tracer.recordSpan('OPA_EVALUATION', 'OPA_ENGINE', 15, { status: 'COMPLIANT' });
         tracer.finish();
 
-        const toolCall = {
-          toolName: invokedToolName,
-          provider,
-          arguments: { query: prompt },
-          result: 'AI response generated; no provider mutation was claimed.',
-          success: false,
-          latencyMs: 0,
-          traceId
-        };
-
         logAudit(
           'current-operator@multicloud.corp',
           'ROLE_DEV',
           provider,
-          'AI_AGENT_ORCHESTRATION',
+          'AI_RESPONSE_GENERATED',
           'QUERY',
           'LOW',
           'SUCCESS',
-          `Agente de IA orquestrou ferramenta ${invokedToolName} (${usedModel}) para solicitação: "${prompt.slice(0, 60)}..."`
+          `Resposta de IA gerada por ${usedModel}; nenhuma mutação de infraestrutura foi executada.`
         );
 
         res.json({
           reply: geminiResponseText,
           status: 'SUCCESS',
-          invokedTools: [toolCall],
+          invokedTools: [],
+          aiProvider: 'GEMINI',
+          aiModel: usedModel,
+          infrastructureExecution: 'NOT_PERFORMED',
           traceId
         });
         return;
