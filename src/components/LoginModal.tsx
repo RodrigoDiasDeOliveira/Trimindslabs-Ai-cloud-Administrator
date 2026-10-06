@@ -10,7 +10,7 @@ import {
   Eye,
   EyeOff
 } from 'lucide-react';
-import { AuthUser, AppTheme } from '../types';
+import { AuthUser } from '../types';
 import { Language, translations } from '../i18n';
 
 interface LoginModalProps {
@@ -18,7 +18,6 @@ interface LoginModalProps {
   onClose: () => void;
   onLoginSuccess: (user: AuthUser) => void;
   currentLanguage: Language;
-  theme: AppTheme;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
@@ -26,7 +25,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onClose,
   onLoginSuccess,
   currentLanguage,
-  theme
 }) => {
   const t = translations[currentLanguage];
   const [username, setUsername] = useState('admin');
@@ -114,7 +112,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                className={`w-full pl-9 pr-4 py-2 rounded-xl text-xs border focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                className={`w-full pl-9 pr-4 py-2 rounded-xl text-xs border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   'bg-slate-50 border-slate-300 text-slate-900'
                 }`}
               />
@@ -132,7 +130,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className={`w-full pl-9 pr-10 py-2 rounded-xl text-xs border focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                className={`w-full pl-9 pr-10 py-2 rounded-xl text-xs border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   'bg-slate-50 border-slate-300 text-slate-900'
                 }`}
               />
