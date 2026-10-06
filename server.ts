@@ -535,27 +535,13 @@ app.post('/api/providers/connect', async (req: Request, res: Response) => {
   }
 });
 
-// Add/configure a cloud provider. Registration never fabricates credentials,
-// resources, latency, or health; a real probe is required to report CONNECTED.
+// Legacy registration endpoint intentionally refuses unverified state.
 app.post('/api/providers/add', (req: Request, res: Response) => {
   const user = authenticatedUser(req);
   if (!user || !user.permissions.includes('MANAGE_CLOUDS')) return res.status(403).json({ error: 'Forbidden' });
 
-  const { provider, defaultRegion, selectedServices } = req.body || {};
-  if (!provider) return res.status(400).json({ error: 'Provedor é obrigatório' });
-
-  const provUpper = String(provider).toUpperCase().trim();
-  const services = Array.isArray(selectedServices) ? selectedServices : [];
-  const idx = providersList.findIndex(p => p.provider === provUpper);
   return res.status(409).json({
     success: false,
-    provider: provUpper,
-    status: 'NOT_CONFIGURED',
-    message: 'O cadastro de uma nuvem exige validação real. Use /api/providers/connect; nenhum provider é registrado por este endpoint.'
-  });
-  return res.status(409).json({
-    success: false,
-    provider: provUpper,
     status: 'NOT_CONFIGURED',
     message: 'O cadastro de uma nuvem exige validação real. Use /api/providers/connect; nenhum provider é registrado por este endpoint.'
   });
