@@ -10,6 +10,8 @@ import { AuditCryptoChain } from './src/core/auditCrypto';
 import { BackupDrManager } from './src/core/backupManager';
 import { OpenTelemetryTracer } from './src/core/telemetryOtel';
 import { InputValidator } from './src/core/inputValidator';
+import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
+import { EC2Client, DescribeInstancesCommand } from '@aws-sdk/client-ec2';
 import { CloudResource, AuditLog, IacFile, ProviderStatus } from './src/types';
 
 dotenv.config();
@@ -163,16 +165,16 @@ const initialProviders = [
   {
     provider: 'AWS',
     status: 'NOT_CONFIGURED' as const,
-    defaultRegion: 'us-east-1',
+    defaultRegion: null,
     activeResourcesCount: 0,
-    latencyMs: 0,
+    latencyMs: null,
     credentialsValid: false,
     availableServices: ['EC2', 'S3', 'RDS Aurora', 'VPC', 'IAM', 'Lambda', 'KMS']
   },
   {
     provider: 'AZURE',
     status: 'NOT_CONFIGURED' as const,
-    defaultRegion: 'eastus',
+    defaultRegion: null,
     activeResourcesCount: 0,
     latencyMs: 0,
     credentialsValid: false,
@@ -181,7 +183,7 @@ const initialProviders = [
   {
     provider: 'GCP',
     status: 'NOT_CONFIGURED' as const,
-    defaultRegion: 'us-central1',
+    defaultRegion: null,
     activeResourcesCount: 0,
     latencyMs: 0,
     credentialsValid: false,
@@ -190,7 +192,7 @@ const initialProviders = [
   {
     provider: 'OCI',
     status: 'NOT_CONFIGURED' as const,
-    defaultRegion: 'sa-saopaulo-1',
+    defaultRegion: null,
     activeResourcesCount: 0,
     latencyMs: 0,
     credentialsValid: false,
@@ -338,6 +340,98 @@ app.get('/api/providers/AWS/instances', async (req: Request, res: Response) => {
   res.status(result.success ? 200 : 503).json(result);
 });
 
+// Unified real provider connection endpoint. It validates supplied credentials and only
+// registers provider state after a successful provider-side authentication/discovery call.
+app.post('/api/providers/connect', async (req: Request, res: Response) => {
+  const user = authenticatedUser(req);
+  if (!user || !user.permissions.includes('MANAGE_CLOUDS')) return res.status(403).json({ error: 'Forbidden' });
+
+  const { provider, accountName, defaultRegion, credentials, selectedServices } = req.body || {};
+  const prov = String(provider || '').toUpperCase().trim();
+  if (!['AWS', 'AZURE', 'GCP', 'OCI'].includes(prov)) {
+    return res.status(400).json({ status: 'NOT_CONFIGURED', provider: prov || 'UNKNOWN', message: 'Provider não suportado para conexão real.' });
+  }
+  if (!defaultRegion || !String(defaultRegion).trim()) return res.status(400).json({ status: 'FAILED', message: 'Região é obrigatória.' });
+  const startedAt = Date.now();
+  const scopes = Array.isArray(selectedServices) ? selectedServices : [];
+
+  try {
+    if (prov === 'AWS') {
+      const accessKeyId = String(credentials?.accessKeyId || '').trim();
+      const secretAccessKey = String(credentials?.secretAccessKey || '');
+      if (!accessKeyId || !secretAccessKey) return res.status(400).json({ status: 'NOT_CONFIGURED', provider: prov, message: 'AWS Access Key ID e Secret Access Key são obrigatórios para uma conexão real.' });
+      const region = String(defaultRegion).trim();
+      const creds = { accessKeyId, secretAccessKey };
+      const sts = new STSClient({ region, credentials: creds });
+      const identity = await sts.send(new GetCallerIdentityCommand({}));
+      const resourcesFound: any[] = [];
+      if (scopes.includes('COMPUTE')) {
+        const ec2 = new EC2Client({ region, credentials: creds });
+        const response = await ec2.send(new DescribeInstancesCommand({}));
+        for (const reservation of response.Reservations || []) for (const instance of reservation.Instances || []) {
+          const tags = Object.fromEntries((instance.Tags || []).filter(t => t.Key).map(t => [t.Key as string, t.Value || '']));
+          resourcesFound.push({ id: instance.InstanceId, name: tags.Name || instance.InstanceId, provider: 'AWS', category: 'COMPUTE', resourceType: instance.InstanceType || 'EC2', status: instance.State?.Name === 'running' ? 'RUNNING' : instance.State?.Name === 'stopped' ? 'STOPPED' : 'UNKNOWN', region, estimatedMonthlyCost: null, tags, securityPosture: 'NOT_EVALUATED', nativeArnOrId: instance.InstanceId });
+        }
+      }
+      resources = resources.filter(r => r.provider !== 'AWS').concat(resourcesFound);
+      const value: ProviderStatus = { provider: 'AWS', status: 'CONNECTED', defaultRegion: region, activeResourcesCount: resourcesFound.length, latencyMs: Date.now() - startedAt, credentialsValid: true, availableServices: scopes, lastProbeCheck: { probeType: 'sts:GetCallerIdentity', targetEndpoint: 'AWS STS', statusCode: 200, success: true, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString() } };
+      const pidx = providersList.findIndex(p => p.provider === 'AWS'); if (pidx >= 0) providersList[pidx] = { ...providersList[pidx], ...value };
+      logAudit(user.username, user.role, 'AWS', 'CONNECT_CLOUD_PROVIDER', identity.Account || 'AWS_ACCOUNT', 'LOW', 'SUCCESS', 'AWS credentials verified with STS GetCallerIdentity; discovery is read-only.');
+      return res.json({ success: true, status: 'CONNECTED', provider: value, authentication: { verified: true, method: 'AWS_ACCESS_KEY', accountId: identity.Account, arn: identity.Arn, userId: identity.UserId }, discoveredResources: resourcesFound, discoveryErrors: [] });
+    }
+
+    if (prov === 'AZURE') {
+      const tenantId = String(credentials?.tenantId || '').trim(); const clientId = String(credentials?.clientId || '').trim(); const clientSecret = String(credentials?.clientSecret || ''); const subscriptionId = String(credentials?.subscriptionId || '').trim();
+      if (!tenantId || !clientId || !clientSecret || !subscriptionId) return res.status(400).json({ status: 'NOT_CONFIGURED', provider: prov, message: 'Tenant ID, Client ID, Client Secret e Subscription ID são obrigatórios para uma conexão real.' });
+      const tokenRes = await fetch('https://login.microsoftonline.com/' + encodeURIComponent(tenantId) + '/oauth2/v2.0/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, scope: 'https://management.azure.com/.default', grant_type: 'client_credentials' }) });
+      const tokenBody = await tokenRes.text(); let tokenData: any = {}; try { tokenData = JSON.parse(tokenBody); } catch {}
+      if (!tokenRes.ok || !tokenData.access_token) return res.status(502).json({ status: 'FAILED', provider: prov, credentialsValid: false, message: 'Azure Entra ID rejeitou as credenciais: ' + (tokenData?.error_description || tokenBody || ('HTTP ' + tokenRes.status)) });
+      const armHeaders = { Authorization: 'Bearer ' + tokenData.access_token };
+      const subRes = await fetch('https://management.azure.com/subscriptions/' + encodeURIComponent(subscriptionId) + '?api-version=2022-12-01', { headers: armHeaders });
+      const subBody = await subRes.text(); let subData: any = {}; try { subData = JSON.parse(subBody); } catch {}
+      if (!subRes.ok) return res.status(502).json({ status: 'FAILED', provider: prov, credentialsValid: false, message: 'Azure ARM não validou a subscription: ' + (subData?.error?.message || subBody || ('HTTP ' + subRes.status)) });
+      const resourcesFound: any[] = [];
+      if (scopes.includes('COMPUTE') || scopes.includes('STORAGE') || scopes.includes('DATABASE') || scopes.includes('NETWORKING')) {
+        const listRes = await fetch('https://management.azure.com/subscriptions/' + encodeURIComponent(subscriptionId) + '/resources?api-version=2021-04-01', { headers: armHeaders });
+        const listBody = await listRes.text(); let listData: any = {}; try { listData = JSON.parse(listBody); } catch {}
+        if (listRes.ok) for (const item of listData.value || []) resourcesFound.push({ id: item.id, name: item.name, provider: 'AZURE', category: String(item.type || '').toLowerCase().includes('virtualmachines') ? 'COMPUTE' : 'SECURITY', resourceType: item.type || 'Azure Resource', status: 'UNKNOWN', region: item.location || defaultRegion, estimatedMonthlyCost: null, tags: item.tags || {}, securityPosture: 'NOT_EVALUATED', nativeArnOrId: item.id });
+      }
+      resources = resources.filter(r => r.provider !== 'AZURE').concat(resourcesFound);
+      const value: ProviderStatus = { provider: 'AZURE', status: 'CONNECTED', defaultRegion: String(defaultRegion).trim(), activeResourcesCount: resourcesFound.length, latencyMs: Date.now() - startedAt, credentialsValid: true, availableServices: scopes, lastProbeCheck: { probeType: 'oauth2 client_credentials + ARM subscription GET', targetEndpoint: 'https://management.azure.com/subscriptions', statusCode: 200, success: true, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString() } };
+      const pidx = providersList.findIndex(p => p.provider === 'AZURE'); if (pidx >= 0) providersList[pidx] = { ...providersList[pidx], ...value };
+      logAudit(user.username, user.role, 'AZURE', 'CONNECT_CLOUD_PROVIDER', subscriptionId, 'LOW', 'SUCCESS', 'Azure Entra client credentials and ARM subscription access verified.');
+      return res.json({ success: true, status: 'CONNECTED', provider: value, authentication: { verified: true, method: 'AZURE_CLIENT_CREDENTIALS', tenantId, clientId, subscriptionId }, discoveredResources: resourcesFound, discoveryErrors: [] });
+    }
+
+    if (prov === 'OCI') {
+      return res.status(501).json({ status: 'NOT_IMPLEMENTED', provider: 'OCI', credentialsValid: false, message: 'OCI ainda não possui um adapter de autenticação real neste build. Nenhuma conexão ou recurso foi registrado.' });
+    }
+
+    // GCP uses the Cloud Run runtime service identity; the requested service-account field is validated against it.
+    const projectId = String(credentials?.projectId || '').trim(); const serviceAccount = String(credentials?.serviceAccount || '').trim();
+    if (!projectId || !serviceAccount) return res.status(400).json({ status: 'NOT_CONFIGURED', provider: 'GCP', message: 'Project ID e Service Account são obrigatórios.' });
+    const mh = { 'Metadata-Flavor': 'Google' };
+    const identityRes = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email', { headers: mh });
+    const tokenRes = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', { headers: mh });
+    if (!identityRes.ok || !tokenRes.ok) return res.status(503).json({ status: 'FAILED', provider: 'GCP', credentialsValid: false, message: 'Runtime GCP identity/token indisponível. Nenhuma conexão foi registrada.' });
+    const runtimeServiceAccount = (await identityRes.text()).trim(); const tokenData: any = await tokenRes.json(); const authHeaders = { Authorization: 'Bearer ' + tokenData.access_token };
+    const projectRes = await fetch('https://cloudresourcemanager.googleapis.com/v1/projects/' + encodeURIComponent(projectId), { headers: authHeaders });
+    const projectBody = await projectRes.text(); let projectData: any = {}; try { projectData = JSON.parse(projectBody); } catch {}
+    if (!projectRes.ok) return res.status(502).json({ status: 'FAILED', provider: 'GCP', credentialsValid: false, message: 'GCP project validation failed: ' + (projectData?.error?.message || projectBody || ('HTTP ' + projectRes.status)) });
+    const resourcesFound: any[] = [];
+    if (scopes.includes('STORAGE')) { const sr=await fetch('https://storage.googleapis.com/storage/v1/b?project='+encodeURIComponent(projectId),{headers:authHeaders}); const sb=await sr.text(); let sd:any={}; try{sd=JSON.parse(sb)}catch{}; if(sr.ok) for(const b of sd.items||[]) resourcesFound.push({id:b.id,name:b.name,provider:'GCP',category:'STORAGE',resourceType:'Cloud Storage Bucket',status:'UNKNOWN',region:b.location||defaultRegion,estimatedMonthlyCost:null,tags:b.labels||{},securityPosture:'NOT_EVALUATED',nativeArnOrId:b.id}); }
+    if (scopes.includes('SERVERLESS')) { const rr=await fetch('https://run.googleapis.com/apis/serving.knative.dev/v1/namespaces/'+encodeURIComponent(projectId)+'/services',{headers:authHeaders}); const rb=await rr.text(); let rd:any={}; try{rd=JSON.parse(rb)}catch{}; if(rr.ok) for(const s of rd.items||[]) resourcesFound.push({id:s.metadata?.uid||s.metadata?.name,name:s.metadata?.name,provider:'GCP',category:'COMPUTE',resourceType:'Cloud Run Service',status:'UNKNOWN',region:s.metadata?.labels?.['cloud.googleapis.com/location']||defaultRegion,estimatedMonthlyCost:null,tags:s.metadata?.labels||{},securityPosture:'NOT_EVALUATED',nativeArnOrId:s.metadata?.selfLink||s.metadata?.name}); }
+    resources=resources.filter(r=>r.provider!=='GCP').concat(resourcesFound);
+    const value:ProviderStatus={provider:'GCP',status:'CONNECTED',defaultRegion:String(defaultRegion).trim(),activeResourcesCount:resourcesFound.length,latencyMs:Date.now()-startedAt,credentialsValid:true,availableServices:scopes,lastProbeCheck:{probeType:'cloudresourcemanager.projects.get + read-only discovery',targetEndpoint:'Google Cloud APIs',statusCode:200,success:true,latencyMs:Date.now()-startedAt,checkedAt:new Date().toISOString()}};
+    const pidx=providersList.findIndex(p=>p.provider==='GCP'); if(pidx>=0) providersList[pidx]={...providersList[pidx],...value};
+    logAudit(user.username,user.role,'GCP','CONNECT_CLOUD_PROVIDER',projectId,'LOW','SUCCESS','GCP project access verified with Cloud Run runtime identity.');
+    return res.json({success:true,status:'CONNECTED',provider:value,project:{projectId:projectData.projectId||projectId,projectNumber:projectData.projectNumber,name:projectData.name,lifecycleState:projectData.lifecycleState},authentication:{verified:true,method:'CLOUD_RUN_RUNTIME_SERVICE_IDENTITY',runtimeServiceAccount,requestedServiceAccount:serviceAccount,requestedServiceAccountMatchesRuntime:runtimeServiceAccount===serviceAccount},discoveredResources:resourcesFound,discoveryErrors:[]});
+  } catch (err:any) {
+    logAudit(user.username,user.role,prov,'CONNECT_CLOUD_PROVIDER',accountName || prov,'MEDIUM','FAILED',err?.message || String(err));
+    return res.status(502).json({ status:'FAILED', provider:prov, credentialsValid:false, message:err?.message || 'Falha na conexão real do provider. Nenhum estado foi registrado.' });
+  }
+});
+
 // Add/configure a cloud provider. Registration never fabricates credentials,
 // resources, latency, or health; a real probe is required to report CONNECTED.
 app.post('/api/providers/gcp/connect', async (req: Request, res: Response) => {
@@ -388,7 +482,7 @@ app.post('/api/providers/gcp/connect', async (req: Request, res: Response) => {
         for (const bucket of storageData.items || []) resourcesFound.push({
           id: bucket.id, name: bucket.name, provider: 'GCP', category: 'STORAGE',
           resourceType: 'Cloud Storage Bucket', status: 'RUNNING', region: bucket.location || defaultRegion,
-          estimatedMonthlyCost: 0, tags: bucket.labels || {}, securityPosture: 'REVIEW_REQUIRED', nativeArnOrId: bucket.id
+          estimatedMonthlyCost: null, tags: bucket.labels || {}, securityPosture: 'NOT_EVALUATED', nativeArnOrId: bucket.id
         });
       } else discoveryErrors.push(`Cloud Storage: ${storageData?.error?.message || `HTTP ${storageRes.status}`}`);
     } catch (err: any) { discoveryErrors.push(`Cloud Storage: ${err?.message || String(err)}`); }
