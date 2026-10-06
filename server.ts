@@ -14,7 +14,7 @@ import { CloudResource, AuditLog, IacFile, ProviderStatus } from './src/types';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 8080;
 
 app.use(express.json());
 
@@ -249,135 +249,78 @@ function logAudit(
 }
 
 // ----------------------------------------------------
-// AUTHENTICATION ENDPOINTS (Spring Security Mirror)
-// ----------------------------------------------------
+ // AUTHENTICATION ENDPOINTS
+ // Production credentials come only from environment/secret management.
+ // A single demo profile is available only when DEMO_MODE=true.
+ // ----------------------------------------------------
+type SessionUser = {
+  username: string;
+  displayName: string;
+  role: string;
+  permissions: string[];
+};
+
+const sessions = new Map<string, SessionUser>();
+const DEMO_MODE = process.env.DEMO_MODE === 'true';
+
+const ROLE_PROFILES: Record<string, SessionUser> = {
+  admin: { username: 'admin', displayName: 'Cloud Administrator', role: 'ROLE_ADMIN', permissions: ['READ','WRITE','EXECUTE_CRITICAL','BLAST_RADIUS_APPROVE','MANAGE_CLOUDS','EXPORT_AUDIT','IAC_DEPLOY','BACKUP_OPERATE','POLICY_MANAGE'] },
+  dev: { username: 'dev', displayName: 'DevOps Engineer', role: 'ROLE_DEV', permissions: ['READ','WRITE','EXECUTE_CRITICAL','IAC_DEPLOY','BACKUP_OPERATE'] },
+  observer: { username: 'observer', displayName: 'Security Observer', role: 'ROLE_OBSERVER', permissions: ['READ','EXPORT_AUDIT'] }
+};
+
+function issueSession(user: SessionUser): string {
+  const token = `session-${crypto.randomUUID()}`;
+  sessions.set(token, user);
+  return token;
+}
+
+function authenticatedUser(req: Request): SessionUser | null {
+  const raw = req.headers.authorization || '';
+  if (!raw.startsWith('Bearer ')) return null;
+  return sessions.get(raw.slice(7)) || null;
+}
 
 app.post('/api/auth/login', (req: Request, res: Response) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    res.status(400).json({ error: 'Username e senha são obrigatórios' });
-    return;
+  const { username, password } = req.body || {};
+  const u = String(username || '').trim().toLowerCase();
+  const configured = [
+    ['ADMIN_USERNAME','ADMIN_PASSWORD','admin'],
+    ['DEV_USERNAME','DEV_PASSWORD','dev'],
+    ['OBSERVER_USERNAME','OBSERVER_PASSWORD','observer']
+  ] as const;
+
+  for (const [userKey, passKey, profileKey] of configured) {
+    const expectedUser = process.env[userKey];
+    const expectedPass = process.env[passKey];
+    if (expectedUser && expectedPass && u === expectedUser.toLowerCase() && password === expectedPass) {
+      const profile = ROLE_PROFILES[profileKey];
+      const token = issueSession(profile);
+      logAudit(profile.username, profile.role, 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Authentication succeeded.');
+      return res.json({ ...profile, token });
+    }
   }
 
-  const u = String(username).toLowerCase().trim();
-
-  if (u === 'admin' && password === 'admin123') {
-    const userObj = {
-      token: `jwt-adm-${Date.now()}`,
-      username: 'admin',
-      displayName: 'Rodrigo Dias (Administrador Cloud)',
-      role: 'ROLE_ADMIN',
-      permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'BLAST_RADIUS_APPROVE', 'MANAGE_CLOUDS', 'EXPORT_AUDIT', 'IAC_DEPLOY', 'BACKUP_OPERATE', 'POLICY_MANAGE']
-    };
-    logAudit('admin', 'ROLE_ADMIN', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação bem-sucedida com perfil de Administrador Geral.');
-    res.json(userObj);
-    return;
-  }
-
-  if (u === 'dev' && password === 'dev123') {
-    const userObj = {
-      token: `jwt-dev-${Date.now()}`,
-      username: 'dev',
-      displayName: 'DevOps Engineer',
-      role: 'ROLE_DEV',
-      permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'IAC_DEPLOY', 'BACKUP_OPERATE']
-    };
-    logAudit('dev', 'ROLE_DEV', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação bem-sucedida com perfil de Desenvolvedor / DevOps.');
-    res.json(userObj);
-    return;
-  }
-
-  if (u === 'observer' && password === 'observer123') {
-    const userObj = {
-      token: `jwt-obs-${Date.now()}`,
-      username: 'observer',
-      displayName: 'Auditor de Segurança (Observer)',
+  if (DEMO_MODE && u === 'demo' && password === 'demo') {
+    const profile: SessionUser = {
+      username: 'demo',
+      displayName: 'Demonstration Operator',
       role: 'ROLE_OBSERVER',
-      permissions: ['READ', 'EXPORT_AUDIT']
+      permissions: ['READ','EXPORT_AUDIT']
     };
-    logAudit('observer', 'ROLE_OBSERVER', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação bem-sucedida com perfil de Observador (Apenas Leitura).');
-    res.json(userObj);
-    return;
+    const token = issueSession(profile);
+    logAudit(profile.username, profile.role, 'DEMO', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Demo session started. No provider mutation is enabled by the demo profile.');
+    return res.json({ ...profile, token, demo: true });
   }
 
-  if (u === 'finops' && password === 'finops123') {
-    const userObj = {
-      token: `jwt-finops-${Date.now()}`,
-      username: 'finops',
-      displayName: 'FinOps Cloud Lead',
-      role: 'ROLE_FINOPS',
-      permissions: ['READ', 'FINOPS_VIEW', 'EXPORT_AUDIT']
-    };
-    logAudit('finops', 'ROLE_FINOPS', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação com perfil FinOps (Gestão e Otimização Financeira).');
-    res.json(userObj);
-    return;
-  }
-
-  if (u === 'security' && password === 'sec123') {
-    const userObj = {
-      token: `jwt-sec-${Date.now()}`,
-      username: 'security',
-      displayName: 'Security & Compliance Officer',
-      role: 'ROLE_SECURITY_AUDITOR',
-      permissions: ['READ', 'EXPORT_AUDIT', 'POLICY_MANAGE']
-    };
-    logAudit('security', 'ROLE_SECURITY_AUDITOR', 'SYSTEM', 'LOGIN', 'SESSION', 'LOW', 'SUCCESS', 'Autenticação com perfil Auditor de Segurança e Políticas.');
-    res.json(userObj);
-    return;
-  }
-
-  logAudit(username, 'UNKNOWN', 'SYSTEM', 'LOGIN_FAILED', 'SESSION', 'MEDIUM', 'FAILED', `Tentativa de login frustrada para o usuário "${username}".`);
-  res.status(401).json({ error: 'Credenciais inválidas. Usuários disponíveis: admin, dev, observer, finops, security' });
+  logAudit(u || 'unknown', 'UNKNOWN', 'SYSTEM', 'LOGIN_FAILED', 'SESSION', 'MEDIUM', 'FAILED', 'Authentication failed.');
+  return res.status(401).json({ error: 'Credenciais inválidas ou usuário não configurado.' });
 });
 
 app.get('/api/auth/me', (req: Request, res: Response) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    res.status(401).json({ error: 'Não autenticado' });
-    return;
-  }
-  if (authHeader.includes('jwt-dev')) {
-    res.json({
-      username: 'dev',
-      displayName: 'DevOps Engineer',
-      role: 'ROLE_DEV',
-      permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'IAC_DEPLOY', 'BACKUP_OPERATE']
-    });
-    return;
-  }
-  if (authHeader.includes('jwt-obs')) {
-    res.json({
-      username: 'observer',
-      displayName: 'Auditor de Segurança (Observer)',
-      role: 'ROLE_OBSERVER',
-      permissions: ['READ', 'EXPORT_AUDIT']
-    });
-    return;
-  }
-  if (authHeader.includes('jwt-finops')) {
-    res.json({
-      username: 'finops',
-      displayName: 'FinOps Cloud Lead',
-      role: 'ROLE_FINOPS',
-      permissions: ['READ', 'FINOPS_VIEW', 'EXPORT_AUDIT']
-    });
-    return;
-  }
-  if (authHeader.includes('jwt-sec')) {
-    res.json({
-      username: 'security',
-      displayName: 'Security & Compliance Officer',
-      role: 'ROLE_SECURITY_AUDITOR',
-      permissions: ['READ', 'EXPORT_AUDIT', 'POLICY_MANAGE']
-    });
-    return;
-  }
-  res.json({
-    username: 'admin',
-    displayName: 'Rodrigo Dias (Administrador Cloud)',
-    role: 'ROLE_ADMIN',
-    permissions: ['READ', 'WRITE', 'EXECUTE_CRITICAL', 'BLAST_RADIUS_APPROVE', 'MANAGE_CLOUDS', 'EXPORT_AUDIT', 'IAC_DEPLOY', 'BACKUP_OPERATE', 'POLICY_MANAGE']
-  });
+  const user = authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
+  return res.json(user);
 });
 
 // Provider Statuses
@@ -413,80 +356,50 @@ app.get('/api/providers/:provider/probe', async (req: Request, res: Response) =>
 app.get('/api/providers/AWS/instances', async (req: Request, res: Response) => {
   const region = typeof req.query.region === 'string' && req.query.region.trim() ? req.query.region.trim() : undefined;
   const result = await UnifiedCloudService.describeAwsInstances(region);
+  if (result.success && Array.isArray(result.result)) {
+    resources = result.result.map((item: any) => ({
+      id: item.instanceId,
+      name: item.name || item.instanceId,
+      provider: 'AWS',
+      category: 'COMPUTE',
+      resourceType: item.instanceType || 'EC2',
+      status: item.state === 'running' ? 'RUNNING' : item.state === 'stopped' ? 'STOPPED' : 'DEGRADED',
+      region: region || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
+      estimatedMonthlyCost: 0,
+      tags: item.tags || {},
+      securityPosture: 'SECURE',
+      nativeArnOrId: item.instanceId
+    }));
+  }
   res.status(result.success ? 200 : 503).json(result);
 });
 
-// Add New Cloud Provider with Custom Resources & Services
+// Add/configure a cloud provider. Registration never fabricates credentials,
+// resources, latency, or health; a real probe is required to report CONNECTED.
 app.post('/api/providers/add', (req: Request, res: Response) => {
-  const { provider, defaultRegion, credentials, selectedServices, initialResources } = req.body;
-  if (!provider) {
-    res.status(400).json({ error: 'Provedor é obrigatório' });
-    return;
-  }
+  const user = authenticatedUser(req);
+  if (!user || !user.permissions.includes('MANAGE_CLOUDS')) return res.status(403).json({ error: 'Forbidden' });
+
+  const { provider, defaultRegion, selectedServices } = req.body || {};
+  if (!provider) return res.status(400).json({ error: 'Provedor é obrigatório' });
 
   const provUpper = String(provider).toUpperCase().trim();
-  const existingIdx = providersList.findIndex(p => p.provider === provUpper);
-
-  const services = Array.isArray(selectedServices) && selectedServices.length > 0
-    ? selectedServices
-    : ['Compute', 'Storage', 'Database', 'Networking', 'Security'];
-
-  const newProviderObj = {
+  const services = Array.isArray(selectedServices) ? selectedServices : [];
+  const idx = providersList.findIndex(p => p.provider === provUpper);
+  const value: ProviderStatus = {
     provider: provUpper,
-    status: 'NOT_CONFIGURED' as const,
-    defaultRegion: defaultRegion || 'us-east-1',
-    activeResourcesCount: 0,
-    latencyMs: Math.floor(Math.random() * 25) + 35,
+    status: 'NOT_CONFIGURED',
+    defaultRegion: defaultRegion || 'global',
+    activeResourcesCount: resources.filter(r => r.provider === provUpper).length,
+    latencyMs: 0,
     credentialsValid: false,
     availableServices: services
   };
+  if (idx >= 0) providersList[idx] = { ...providersList[idx], ...value };
+  else providersList.push(value);
 
-  if (existingIdx >= 0) {
-    providersList[existingIdx] = { ...providersList[existingIdx], ...newProviderObj };
-  } else {
-    providersList.push(newProviderObj);
-  }
-
-  // Add customized initial resources selected via checkboxes
-  let addedCount = 0;
-  if (Array.isArray(initialResources) && initialResources.length > 0) {
-    initialResources.forEach((resItem: any) => {
-      resources.push({
-        id: resItem.id || `res-${provUpper.toLowerCase()}-${Date.now().toString().slice(-4)}-${Math.floor(Math.random() * 100)}`,
-        name: resItem.name || `${provUpper.toLowerCase()}-workload-01`,
-        provider: provUpper as any,
-        category: resItem.category || 'COMPUTE',
-        resourceType: resItem.resourceType || 'Standard-Instance',
-        status: resItem.status || 'RUNNING',
-        region: resItem.region || defaultRegion || 'us-east-1',
-        estimatedMonthlyCost: Number(resItem.estimatedMonthlyCost) || 45.00,
-        tags: resItem.tags || { Environment: 'Production', Owner: 'MultiCloud-Team', ManagedBy: 'AI-Agent' },
-        securityPosture: 'SECURE',
-        nativeArnOrId: resItem.nativeArnOrId || `urn:${provUpper.toLowerCase()}:res:${Date.now()}`
-      });
-      addedCount++;
-    });
-  }
-
-  const userEmail = (req.headers['x-user-email'] as string) || 'admin@multicloud.corp';
-  const userRole = (req.headers['x-user-role'] as string) || 'ROLE_ADMIN';
-
-  logAudit(
-    userEmail,
-    userRole,
-    provUpper,
-    'ADD_CLOUD_PROVIDER',
-    provUpper,
-    'MEDIUM',
-    'SUCCESS',
-    `Nuvem ${provUpper} conectada com ${services.length} serviços selecionados (${services.join(', ')}) e ${addedCount} recurso(s) provisionado(s).`
-  );
-
-  res.json({
-    success: true,
-    provider: newProviderObj,
-    addedResourcesCount: addedCount
-  });
+  logAudit(user.username, user.role, provUpper, 'ADD_CLOUD_PROVIDER', provUpper, 'MEDIUM', 'SUCCESS', 'Provider registration stored without claiming connectivity or provisioning.');
+  return res.json({ success: true, provider: value, addedResourcesCount: 0 });
 });
 
 // Resources List and Filtering
@@ -515,42 +428,31 @@ app.get('/api/resources', (req: Request, res: Response) => {
   res.json(filtered);
 });
 
-// Resource Actions (Direct execution)
-app.post('/api/resources/:id/action', (req: Request, res: Response) => {
+// Resource lifecycle actions are executed only by a real provider adapter.
+app.post('/api/resources/:id/action', async (req: Request, res: Response) => {
+  const user = authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
+
   const { id } = req.params;
-  const { action } = req.body;
+  const action = String(req.body?.action || '').toUpperCase();
+  if (!['START','STOP','RESTART','TERMINATE'].includes(action)) {
+    return res.status(400).json({ error: 'Unsupported action' });
+  }
+  if (action === 'TERMINATE' && !user.permissions.includes('EXECUTE_CRITICAL')) {
+    return res.status(403).json({ error: 'Critical action requires EXECUTE_CRITICAL permission' });
+  }
+  if (!user.permissions.includes('WRITE')) return res.status(403).json({ error: 'Write permission required' });
 
   const target = resources.find(r => r.id === id);
-  if (!target) {
-    res.status(404).json({ error: 'Recurso não encontrado' });
-    return;
-  }
+  if (!target) return res.status(404).json({ error: 'Recurso não encontrado' });
+  if (target.provider !== 'AWS') return res.status(501).json({ error: 'REAL_PROVIDER_ADAPTER_NOT_CONFIGURED', provider: target.provider });
 
-  let newStatus = target.status;
-  if (action === 'STOP') newStatus = 'STOPPED';
-  if (action === 'START') newStatus = 'RUNNING';
-  if (action === 'RESTART') newStatus = 'RUNNING';
+  const result = await UnifiedCloudService.performAwsInstanceAction(action as any, target.nativeArnOrId || target.id, target.region);
+  logAudit(user.username, user.role, target.provider, action, target.id, action === 'TERMINATE' ? 'CRITICAL' : 'MEDIUM',
+    result.success ? 'SUCCESS' : 'FAILED', result.message);
 
-  target.status = newStatus;
-
-  // Log to audit
-  const logEntry = logAudit(
-    'current-operator@multicloud.corp',
-    'ROLE_DEV',
-    target.provider,
-    action || 'ACTION',
-    target.name,
-    action === 'STOP' || action === 'DELETE' ? 'CRITICAL' : 'MEDIUM',
-    'SUCCESS',
-    `Operação ${action} executada com sucesso no recurso ${target.name} (${target.resourceType}) via API direta.`
-  );
-
-  res.json({
-    success: true,
-    resource: target,
-    action,
-    message: `Ação ${action} aplicada em ${target.name} (${target.provider}).`
-  });
+  if (result.success && action === 'TERMINATE') resources = resources.filter(r => r.id !== id);
+  return res.status(result.success ? 200 : 502).json(result);
 });
 
 // Audit Logs Endpoint
