@@ -99,14 +99,8 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
 
   const handleSelectProvider = (provId: string) => {
     setSelectedProvider(provId);
-    if (provId) {
-      setDefaultRegion('');
-      if (provId === 'AWS') setComputeInstanceType('t3.large');
-      if (provId === 'AZURE') setComputeInstanceType('Standard_D2s_v5');
-      if (provId === 'GCP') setComputeInstanceType('e2-standard-4');
-      if (provId === 'OCI') setComputeInstanceType('VM.Standard.A1.Flex');
-      if (provId === 'ALIBABA') setComputeInstanceType('ecs.g6.large');
-    }
+    setDefaultRegion('');
+    setComputeInstanceType('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
