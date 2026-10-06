@@ -362,19 +362,7 @@ export default function App() {
           </div>
         </div>
       )}
-              <span className="text-xs font-semibold">{notification.text}</span>
-            </div>
-            <button
-              onClick={() => setNotification(null)}
-              className="text-slate-400 hover:text-white p-1"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Top Application Header */}
+              {/* Top Application Header */}
       <Header
         providers={providers}
         currentTab={currentTab}
