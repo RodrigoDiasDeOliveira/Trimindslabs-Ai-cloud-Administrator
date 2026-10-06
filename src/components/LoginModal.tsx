@@ -6,7 +6,6 @@ import {
   Key, 
   CheckCircle2, 
   AlertCircle, 
-  Sparkles,
   X,
   Eye,
   EyeOff
@@ -30,7 +29,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   theme
 }) => {
   const t = translations[currentLanguage];
-  const [username, setUsername] = useState('');
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,18 +62,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     }
   };
 
-  const quickUsers = [
-    {
-      id: 'demo',
-      label: 'Demo (Simulação)',
-      role: 'ROLE_OBSERVER',
-      desc: 'Único perfil de demonstração; somente leitura e sem mutações de cloud.',
-      u: 'demo',
-      p: 'demo',
-      color: 'border-slate-400 bg-slate-100 text-slate-700'
-    }
-  ];
-
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/30 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl p-6 relative transition-all">
@@ -96,7 +83,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               {t.login}
             </h2>
             <p className="text-xs text-slate-400">
-              Spring Boot Security (RBAC): Admin, Dev e Observer
+              Acesso administrativo protegido por RBAC
             </p>
           </div>
         </div>
@@ -107,31 +94,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <span>{errorMsg}</span>
           </div>
         )}
-
-        {/* 1-Click Profile Selectors for Fast Verification */}
-        <div className="mb-5 space-y-2">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
-            Exemplo de demonstração (opcional):
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {quickUsers.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  setUsername(item.u);
-                  setPassword(item.p);
-                  handleLogin(item.u, item.p);
-                }}
-                disabled={isLoading}
-                className={`p-2.5 rounded-xl border text-left transition-all hover:scale-[1.02] cursor-pointer ${item.color}`}
-              >
-                <div className="font-bold text-xs">{item.label}</div>
-                <div className="text-[10px] text-slate-400 mt-0.5">{item.u} / {item.p}</div>
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* Manual Credentials Form */}
         <form
@@ -153,9 +115,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 onChange={(e) => setUsername(e.target.value)}
                 required
                 className={`w-full pl-9 pr-4 py-2 rounded-xl text-xs border focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  theme === 'light'
-                    ? 'bg-slate-50 border-slate-300 text-slate-900'
-                    : 'bg-slate-900/80 border-slate-700 text-white'
+                  'bg-slate-50 border-slate-300 text-slate-900'
                 }`}
               />
             </div>
@@ -173,9 +133,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 className={`w-full pl-9 pr-10 py-2 rounded-xl text-xs border focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                  theme === 'light'
-                    ? 'bg-slate-50 border-slate-300 text-slate-900'
-                    : 'bg-slate-900/80 border-slate-700 text-white'
+                  'bg-slate-50 border-slate-300 text-slate-900'
                 }`}
               />
               <button
@@ -192,7 +150,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl border border-slate-700 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
             >
               {t.btnCancel}
             </button>
