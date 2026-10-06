@@ -340,6 +340,109 @@ app.get('/api/providers/AWS/instances', async (req: Request, res: Response) => {
 
 // Add/configure a cloud provider. Registration never fabricates credentials,
 // resources, latency, or health; a real probe is required to report CONNECTED.
+app.post('/api/providers/gcp/connect', async (req: Request, res: Response) => {
+  const user = authenticatedUser(req);
+  if (!user || !user.permissions.includes('MANAGE_CLOUDS')) return res.status(403).json({ error: 'Forbidden' });
+
+  const { projectId, serviceAccount, defaultRegion, zone, selectedServices } = req.body || {};
+  if (!projectId || !serviceAccount || !defaultRegion || !zone) {
+    return res.status(400).json({ error: 'Project ID, Service Account, região e zona são obrigatórios.' });
+  }
+
+  const startedAt = Date.now();
+  try {
+    const metadataHeaders = { 'Metadata-Flavor': 'Google' };
+    const identityRes = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email', { headers: metadataHeaders });
+    if (!identityRes.ok) {
+      return res.status(503).json({ status: 'FAILED', provider: 'GCP', credentialsValid: false,
+        message: 'O runtime não possui uma identidade Google Cloud disponível para validar esta conexão. Nenhuma conexão foi registrada.' });
+    }
+
+    const runtimeServiceAccount = (await identityRes.text()).trim();
+    const tokenRes = await fetch('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token', { headers: metadataHeaders });
+    if (!tokenRes.ok) throw new Error('Não foi possível obter o token OAuth da identidade do runtime.');
+    const tokenData = await tokenRes.json() as { access_token?: string };
+    if (!tokenData.access_token) throw new Error('O metadata server não retornou um access token.');
+
+    const authHeaders = { Authorization: `Bearer ${tokenData.access_token}` };
+    const projectRes = await fetch(`https://cloudresourcemanager.googleapis.com/v1/projects/${encodeURIComponent(String(projectId).trim())}`, { headers: authHeaders });
+    const projectBody = await projectRes.text();
+    let projectData: any = {};
+    try { projectData = JSON.parse(projectBody); } catch {}
+
+    if (!projectRes.ok) {
+      const detail = projectData?.error?.message || projectBody || `HTTP ${projectRes.status}`;
+      return res.status(502).json({ status: 'FAILED', provider: 'GCP', credentialsValid: false,
+        message: `Falha ao validar acesso ao projeto ${projectId}: ${detail}`, runtimeServiceAccount });
+    }
+
+    const resourcesFound: any[] = [];
+    const discoveryErrors: string[] = [];
+
+    try {
+      const storageRes = await fetch(`https://storage.googleapis.com/storage/v1/b?project=${encodeURIComponent(String(projectId).trim())}`, { headers: authHeaders });
+      const storageBody = await storageRes.text();
+      let storageData: any = {};
+      try { storageData = JSON.parse(storageBody); } catch {}
+      if (storageRes.ok) {
+        for (const bucket of storageData.items || []) resourcesFound.push({
+          id: bucket.id, name: bucket.name, provider: 'GCP', category: 'STORAGE',
+          resourceType: 'Cloud Storage Bucket', status: 'RUNNING', region: bucket.location || defaultRegion,
+          estimatedMonthlyCost: 0, tags: bucket.labels || {}, securityPosture: 'REVIEW_REQUIRED', nativeArnOrId: bucket.id
+        });
+      } else discoveryErrors.push(`Cloud Storage: ${storageData?.error?.message || `HTTP ${storageRes.status}`}`);
+    } catch (err: any) { discoveryErrors.push(`Cloud Storage: ${err?.message || String(err)}`); }
+
+    try {
+      const runRes = await fetch(`https://run.googleapis.com/apis/serving.knative.dev/v1/namespaces/${encodeURIComponent(String(projectId).trim())}/services`, { headers: authHeaders });
+      const runBody = await runRes.text();
+      let runData: any = {};
+      try { runData = JSON.parse(runBody); } catch {}
+      if (runRes.ok) {
+        for (const service of runData.items || []) resourcesFound.push({
+          id: service.metadata?.uid || service.metadata?.name, name: service.metadata?.name || 'unknown',
+          provider: 'GCP', category: 'SERVERLESS', resourceType: 'Cloud Run Service', status: 'RUNNING',
+          region: service.metadata?.labels?.['cloud.googleapis.com/location'] || defaultRegion,
+          estimatedMonthlyCost: 0, tags: service.metadata?.labels || {},
+          securityPosture: 'REVIEW_REQUIRED', nativeArnOrId: service.metadata?.selfLink || service.metadata?.name
+        });
+      } else discoveryErrors.push(`Cloud Run: ${runData?.error?.message || `HTTP ${runRes.status}`}`);
+    } catch (err: any) { discoveryErrors.push(`Cloud Run: ${err?.message || String(err)}`); }
+
+    resources = resources.filter(r => r.provider !== 'GCP');
+    resources.push(...resourcesFound);
+
+    const services = Array.isArray(selectedServices) ? selectedServices : [];
+    const value: ProviderStatus = {
+      provider: 'GCP', status: 'CONNECTED', defaultRegion: String(defaultRegion).trim(),
+      activeResourcesCount: resourcesFound.length, latencyMs: Date.now() - startedAt, credentialsValid: true,
+      availableServices: services,
+      lastProbeCheck: {
+        probeType: 'cloudresourcemanager.projects.get + read-only inventory', targetEndpoint: 'Google Cloud APIs',
+        statusCode: 200, success: true, latencyMs: Date.now() - startedAt, checkedAt: new Date().toISOString()
+      }
+    };
+    const idx = providersList.findIndex(p => p.provider === 'GCP');
+    if (idx >= 0) providersList[idx] = { ...providersList[idx], ...value }; else providersList.push(value);
+
+    logAudit(user.username, user.role, 'GCP', 'CONNECT_CLOUD_PROVIDER', String(projectId), 'LOW', 'SUCCESS',
+      `GCP project access verified using runtime service identity ${runtimeServiceAccount}. ${resourcesFound.length} real resource(s) discovered.`);
+
+    return res.json({
+      success: true, status: 'CONNECTED', provider: value,
+      project: { projectId: projectData.projectId || projectId, projectNumber: projectData.projectNumber, name: projectData.name, lifecycleState: projectData.lifecycleState },
+      authentication: { verified: true, method: 'CLOUD_RUN_RUNTIME_SERVICE_IDENTITY', runtimeServiceAccount,
+        requestedServiceAccount: serviceAccount, requestedServiceAccountMatchesRuntime: runtimeServiceAccount === String(serviceAccount).trim() },
+      discoveredResources: resourcesFound, discoveryErrors,
+      message: `GCP conectado e validado. ${resourcesFound.length} recurso(s) real(is) descoberto(s).`
+    });
+  } catch (err: any) {
+    logAudit(user.username, user.role, 'GCP', 'CONNECT_CLOUD_PROVIDER', String(projectId), 'MEDIUM', 'FAILED', err?.message || String(err));
+    return res.status(502).json({ status: 'FAILED', provider: 'GCP', credentialsValid: false,
+      message: err?.message || 'Falha ao validar conexão GCP. Nenhuma conexão foi registrada.' });
+  }
+});
+
 app.post('/api/providers/add', (req: Request, res: Response) => {
   const user = authenticatedUser(req);
   if (!user || !user.permissions.includes('MANAGE_CLOUDS')) return res.status(403).json({ error: 'Forbidden' });
