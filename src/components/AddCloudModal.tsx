@@ -96,7 +96,6 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
     { id: 'AZURE', name: 'Microsoft Azure', badge: 'Azure' },
     { id: 'GCP', name: 'Google Cloud Platform', badge: 'GCP' },
     { id: 'OCI', name: 'Oracle Cloud Infrastructure', badge: 'OCI' },
-    { id: 'ALIBABA', name: 'Alibaba Cloud / Custom', badge: 'Alibaba' },
   ];
 
   const handleSelectProvider = (provId: string) => {
@@ -111,11 +110,15 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
     setErrorMsg(null);
 
     try {
-      if (!defaultRegion.trim()) {
+      const connectionRegion = selectedProvider === 'GCP'
+        ? (defaultRegion.trim() || gcpZone.trim())
+        : defaultRegion.trim();
+
+      if (!connectionRegion) {
         throw new Error('Informe a região/zona principal da nuvem antes de continuar.');
       }
-      if (selectedProvider === 'GCP' && !gcpZone.trim()) {
-        throw new Error('Informe a zona do GCP antes de continuar.');
+      if (selectedProvider === 'GCP' && !gcpZone.trim() && !defaultRegion.trim()) {
+        throw new Error('Informe a região ou zona do GCP antes de continuar.');
       }
 
       const selectedServices: string[] = [];
@@ -152,7 +155,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
       const res = await fetch('/api/providers/connect', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ provider: selectedProvider, accountName: accountName.trim(), defaultRegion: defaultRegion.trim(), credentials, selectedServices })
+        body: JSON.stringify({ provider: selectedProvider, accountName: accountName.trim(), defaultRegion: connectionRegion, credentials, selectedServices })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || data.error || 'Falha ao validar a conexão.');
@@ -259,7 +262,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
                   type="text"
                   value={defaultRegion}
                   onChange={(e) => setDefaultRegion(e.target.value)}
-                  placeholder={selectedProvider === 'GCP' ? 'Ex: europe-west1' : 'Ex: região/zona da sua infraestrutura'}
+                  placeholder={selectedProvider === 'GCP' ? 'Ex: europe-west1' : 'Ex: eu-west-1 / westeurope / sa-saopaulo-1'}
                   required
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono"
                 />
@@ -371,13 +374,12 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
                     />
                   </div>
                   <div>
-                    <label className="text-slate-300 block mb-1 font-medium">GCP Zone:</label>
+                    <label className="text-slate-300 block mb-1 font-medium">GCP Zone (opcional):</label>
                     <input
                       type="text"
                       value={gcpZone}
                       onChange={(e) => setGcpZone(e.target.value)}
                       placeholder="Ex: europe-west1-b"
-                      required
                       className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white font-mono"
                     />
                   </div>
