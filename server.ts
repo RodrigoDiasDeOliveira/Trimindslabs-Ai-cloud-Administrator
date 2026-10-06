@@ -450,33 +450,23 @@ app.get('/api/governance', (req: Request, res: Response) => {
   const totalCost = resources.reduce((acc, curr) => acc + curr.estimatedMonthlyCost, 0);
   const secureCount = resources.filter(r => r.securityPosture === 'SECURE').length;
   const complianceScore = resources.length === 0 ? 0 : Math.round((secureCount / resources.length) * 100);
+  const connectedProviders = providersList.filter(p => p.status === 'CONNECTED');
+  const hasInventory = resources.length > 0;
 
   res.json({
     complianceScore,
+    complianceStatus: hasInventory ? 'DERIVED_FROM_INVENTORY' : 'NOT_CONFIGURED',
     totalMonthlyEstimate: totalCost.toFixed(2),
-    activeCloudCount: 4,
+    activeCloudCount: connectedProviders.length,
     totalResources: resources.length,
     policies: [
-      { id: 'pol-01', name: 'Criptografia em Repouso Obrigatória (CMEK / SSE)', status: 'COMPLIANT', violationsCount: 0, severity: 'HIGH' },
-      { id: 'pol-02', name: 'Bloqueio de Ingress Aberto (0.0.0.0/0 na Porta 22/3389)', status: 'COMPLIANT', violationsCount: 0, severity: 'CRITICAL' },
-      { id: 'pol-03', name: 'Padrão de Tagging Mandatório (Environment, Owner)', status: 'COMPLIANT', violationsCount: 0, severity: 'MEDIUM' },
-      { id: 'pol-04', name: 'Prevenção de Buckets Públicos (S3 / Blob / GCS / OCI)', status: 'COMPLIANT', violationsCount: 0, severity: 'CRITICAL' },
-      { id: 'pol-05', name: 'Alerta de Subutilização de Recursos (Idle Instances)', status: 'COMPLIANT', violationsCount: 0, severity: 'LOW' }
+      { id: 'pol-01', name: 'Criptografia em Repouso Obrigatória (CMEK / SSE)', status: hasInventory ? 'REVIEW_REQUIRED' : 'NOT_CONFIGURED', violationsCount: 0, severity: 'HIGH' },
+      { id: 'pol-02', name: 'Bloqueio de Ingress Aberto (0.0.0.0/0 na Porta 22/3389)', status: hasInventory ? 'REVIEW_REQUIRED' : 'NOT_CONFIGURED', violationsCount: 0, severity: 'CRITICAL' },
+      { id: 'pol-03', name: 'Padrão de Tagging Mandatório (Environment, Owner)', status: hasInventory ? 'REVIEW_REQUIRED' : 'NOT_CONFIGURED', violationsCount: 0, severity: 'MEDIUM' },
+      { id: 'pol-04', name: 'Prevenção de Buckets Públicos (S3 / Blob / GCS / OCI)', status: hasInventory ? 'REVIEW_REQUIRED' : 'NOT_CONFIGURED', violationsCount: 0, severity: 'CRITICAL' },
+      { id: 'pol-05', name: 'Alerta de Subutilização de Recursos (Idle Instances)', status: hasInventory ? 'REVIEW_REQUIRED' : 'NOT_CONFIGURED', violationsCount: 0, severity: 'LOW' }
     ],
-    costOptimizationRecommendations: [
-      {
-        provider: 'AWS',
-        resource: 'prod-api-cluster-node-01',
-        recommendation: 'Converter t3.large sob demanda para Savings Plans de 1 ano. Economia estimada: $24.80/mês.',
-        potentialSavings: 24.80
-      },
-      {
-        provider: 'OCI',
-        resource: 'oci-ai-inference-worker',
-        recommendation: 'Instância ARM64 já operando em taxa ótima de custo-benefício (Compute Flex).',
-        potentialSavings: 0.00
-      }
-    ]
+    costOptimizationRecommendations: []
   });
 });
 
