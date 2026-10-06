@@ -54,7 +54,7 @@ export interface ProviderStatus {
     targetEndpoint: string;
     statusCode: number;
     success: boolean;
-    latencyMs: number;
+    latencyMs: number | null;
     checkedAt: string;
   };
 }
