@@ -1097,7 +1097,6 @@ Quando o usuário perguntar ou pedir ações de infraestrutura:
       invokedTools: [],
       traceId
     });
-  }
 
   } catch (err: any) {
     console.error('Agent chat orchestration failed:', err);
