@@ -299,6 +299,15 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
   return res.json(user);
 });
 
+// All operational APIs below require a verified session.
+app.use('/api', (req: Request, res: Response, next) => {
+  if (req.path.startsWith('/auth/')) return next();
+  const user = authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: 'Não autenticado' });
+  (req as any).currentUser = user;
+  next();
+});
+
 // Provider Statuses
 app.get('/api/providers/status', (req: Request, res: Response) => {
   const updated = providersList.map(p => ({
