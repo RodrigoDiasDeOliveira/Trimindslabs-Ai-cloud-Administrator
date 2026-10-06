@@ -1,201 +1,122 @@
-# AI MultiCloud Agent — Enterprise Multi-Cloud AI Platform
+# Trimindslabs AI Cloud Administrator
 
-> ⚠️ **Status do Projeto: MVP / Work in Progress**  
-> Esta plataforma encontra-se atualmente em estágio de **MVP (Produto Mínimo Viável) / Trabalho em Progresso**. A arquitetura corporativa, camada de abstração unificada, políticas de segurança OPA, trilha de auditoria encadeada com SHA-256 e resiliência com Circuit Breaker estão ativas e com cobertura abrangente de testes automatizados.
+> **Estado:** MVP operacional / Work in Progress — preparado para validação de deploy, com capacidades reais explicitamente separadas das que ainda estão `NOT_CONFIGURED`.
 
----
+Plataforma React + TypeScript + Express para administração multi-cloud, inventário, governança, observabilidade, auditoria encadeada e orquestração assistida por IA.
 
-## 📄 Licença do Projeto
-- **Licença Padrão:** **MIT License** (consistente e unificada em todo o repositório).
-- **Resolução de Inconsistência:** Quaisquer referências prévias a GPL-2.0 foram expressamente descontinuadas. O projeto adota a licença permissiva **MIT**, permitindo integração corporativa flexível e conformidade com ambientes de nuvem pública e privada.
+## Estado operacional real
 
----
+### Configurado / operacional
+- React 19 + TypeScript + Vite no frontend.
+- Express como runtime HTTP, frontend e backend no mesmo processo.
+- Autenticação por sessão em memória; credenciais de produção vêm de variáveis de ambiente/secrets.
+- Um único perfil `demo/demo` pode existir somente com `DEMO_MODE=true`; é somente leitura.
+- AWS: health probe via STS, descoberta de instâncias EC2 e ações START/STOP/RESTART/TERMINATE através dos SDKs reais.
+- Motor interno de políticas de governança para avaliação de recursos e IaC.
+- Dry-run explícito para planejamento de operações destrutivas; não altera estado do provedor.
+- Auditoria com encadeamento SHA-256 e verificação de integridade.
+- Tracing interno de operações.
 
-## 🔄 Evolução e Descontinuação do Streamlit
-O protótipo legada em Streamlit/Python foi formalmente **descontinuado e substituído** pelo frontend corporativo de alto desempenho em **React 19 (TypeScript, Tailwind CSS)** acoplado ao gateway **Express + Spring Boot 3.3 Security**.
-- **Por que a migração foi necessária?** O Streamlit não suportava o modelo reativo de streaming de eventos de IA, personalização de múltiplos temas de contraste, internacionalização nativa (PT/EN/ES), nem a governança visual de blast radius com RBAC granular em tempo real.
+### NOT_CONFIGURED / ainda não operacional
+- Azure, GCP e OCI: sem adapter real de lifecycle/health conectado nesta versão.
+- Deploy de IaC: validação/política disponíveis; execução Terraform/native ainda não conectada.
+- Backup e Disaster Recovery cross-cloud: sem adapter real de armazenamento/provedor e sem agendamento persistente.
+- Persistência de inventário, sessões e auditoria: atualmente em memória; reinício/escala do Cloud Run perde esse estado.
+- Relatórios de FinOps: somente dados efetivamente presentes no inventário são calculados; nenhuma economia fixa é afirmada.
+- Conformidade: o motor local avalia regras próprias; **não é uma instalação/runtime do OPA Gatekeeper**.
 
----
-
-## 🏗️ Arquitetura do Sistema
+## Arquitetura atual
 
 ```
-                         ┌────────────────────────────────────────────────────────┐
-                         │              React 19 Frontend Dashboard               │
-                         │    - i18n (Português, Inglês, Espanhol)                │
-                         │    - 3 Temas: Escuro Profundo, Midnight, Claro         │
-                         │    - RBAC Visual: Admin, Dev, Observer, FinOps         │
-                         │    - IaC & Nuvem Studio (Criar, Ajustar e Subir)       │
-                         │    - Interface de Cadastro Dinâmico de Nuvens          │
-                         └───────────────────────────┬────────────────────────────┘
-                                                     │ REST / JSON (Porta 3000)
-                                                     ▼
-                         ┌────────────────────────────────────────────────────────┐
-                         │         Express Gateway & Embedded AI Runtime          │
-                         │    - Proxy reverso transparente                        │
-                         │    - Circuit Breaker + Tenacity Exponential Backoff    │
-                         │    - OpenTelemetry Distributed Tracing (Spans)         │
-                         │    - Open Policy Agent (OPA) Gatekeeper Engine         │
-                         │    - Ledger Criptográfico Imutável (SHA-256 Chaining)  │
-                         │    - Motor Gemini 3.8 Flash com Guardrails             │
-                         └───────────────────────────┬────────────────────────────┘
-                                                     │ Proxy / mTLS (Porta 8080)
-                                                     ▼
-                         ┌────────────────────────────────────────────────────────┐
-                         │            Spring Boot 3.3 Enterprise Backend          │
-                         │    - Spring Security (BCrypt, InMemory/JPA RBAC)       │
-                         │    - AuthController (/api/v1/auth/login, /me)          │
-                         │    - ProviderHealthController (/api/v1/providers)      │
-                         │    - Blast Radius Safety Engine                        │
-                         │    - Trilha Imutável de Auditoria (ADR-004)            │
-                         └───────────────────────────┬────────────────────────────┘
-                                                     │ Cloud SDKs & APIs
-         ┌──────────────┬────────────────────────────┼──────────────┬──────────────┬──────────────┐
-         ▼              ▼                            ▼              ▼              ▼              ▼
-      ┌─────┐       ┌────────┐                    ┌─────┐        ┌─────┐       ┌────────┐     ┌───────┐
-      │ AWS │       │ Azure  │                    │ GCP │        │ OCI │       │ Custom │     │Gemini │
-      └─────┘       └────────┘                    └─────┘        └─────┘       └────────┘     └───────┘
+React 19 / TypeScript / Vite
+          |
+          v
+Express API + AI orchestration + policy engine
+          |
+          +--> AWS SDKs (real, quando credentials estão configuradas)
+          +--> Azure / GCP / OCI (NOT_CONFIGURED)
+          +--> Gemini API (respostas de IA, sem mutação implícita)
+          +--> SHA-256 audit chain
+          +--> internal telemetry
 ```
 
----
+Existe código legado/auxiliar Spring Boot no repositório, mas o caminho principal atual de execução é o runtime Node/Express. Ele não deve ser interpretado como um backend Spring obrigatório para o deploy atual.
 
-## 🧪 Cobertura de Testes Automatizados (15 Testes em 5 Suítes)
-O projeto conta com suítes de testes unitários e de integração com mocks dos SDKs:
-1. **Unified Multi-Cloud Abstraction (`tests/unifiedCloudAdapter.test.ts`)**:
-   - Criação de VM em modo Dry-Run sem mutação de inventário.
-   - Provisionamento real de VM após validação.
-   - Término de recurso em Dry-Run calculando economia FinOps.
-   - Health probe real leve com medição de latência de endpoints.
-2. **Circuit Breaker & Tenacity Retry (`tests/circuitBreaker.test.ts`)**:
-   - Transição de estados: CLOSED ➔ OPEN após limite consecutivo de falhas.
-   - Tentativas automáticas com jitter e backoff exponencial (`retryWithTenacity`).
-3. **Open Policy Agent - OPA Gatekeeper (`tests/opaPolicy.test.ts`)**:
-   - Bloqueio imediato de código Terraform com porta SSH 22 aberta para `0.0.0.0/0` (`OPA-SEC-001`).
-   - Aprovação de templates seguros com criptografia KMS (`OPA-SEC-002`).
-4. **Multi-Cloud Backup & Disaster Recovery (`tests/backupManager.test.ts`)**:
-   - Listagem e cálculo de SLAs de RPO (Recovery Point Objective) e RTO (Recovery Time Objective).
-   - Execução de backup com replicação cruzada e hash SHA-256.
-   - Simulação de drill de restauração sem parada de produção.
-5. **Ledger de Auditoria Criptográfico (`tests/auditCryptoChain.test.ts`)**:
-   - Encadeamento sequencial de blocos com hash SHA-256 e `previousHash`.
-   - Detecção matemática de qualquer adulteração ou injeção retroativa na trilha.
+## Princípio de execução
 
-Para rodar todos os testes:
+A plataforma não transforma planejamento, resposta de IA ou dry-run em execução real.
+
+- **AI response:** gera análise/resposta; `infrastructureExecution=NOT_PERFORMED`.
+- **Dry-run:** produz plano sem efeitos colaterais.
+- **Real execution:** somente ocorre através de um adapter real configurado.
+- **Provider sem adapter:** retorna `NOT_CONFIGURED` / `REAL_PROVIDER_ADAPTER_NOT_CONFIGURED`.
+- Nenhum recurso fictício é criado para representar sucesso.
+
+## Segurança
+
+- Credenciais não são embutidas no frontend.
+- Operações administrativas exigem sessão autenticada e permissões apropriadas.
+- TERMINATE exige `EXECUTE_CRITICAL`.
+- O perfil demo é read-only.
+- Ações destrutivas podem ser interceptadas pelo guardrail e exigir aprovação humana.
+- Não há credenciais padrão válidas no código.
+
+> Para Cloud Run, recomenda-se Secret Manager para `GEMINI_API_KEY`, credenciais AWS e credenciais administrativas.
+
+## Relatórios e governança
+
+Os endpoints de governança e relatório distinguem:
+- dados derivados do inventário real;
+- dados ainda não configurados;
+- resultados que exigem revisão;
+- ausência de evidência.
+
+Nenhuma economia anual, réplica cross-cloud, score de política ou status de auditoria é apresentado como realizado sem evidência runtime correspondente.
+
+## Testes
+
+Execute:
+
 ```bash
+npm install
 npm test
+npm run lint
+npm run build
 ```
 
----
+A pipeline CI executa instalação, TypeScript, testes e build de produção.
 
-## 🛠️ Interface "IaC & Nuvem Studio" (Criar, Ajustar e Subir para a Nuvem)
-Localizada na aba **"IaC & Nuvem Studio"** do painel:
-1. **Criar e Selecionar Modelos**: Suporte a Terraform (`main.tf`), ARM Templates / JSON e Kubernetes YAML para AWS, Azure, GCP e OCI.
-2. **Ajustar Parâmetros**: Controles dinâmicos para alternar tipo de instância, região, criptografia KMS e regras de firewall/SSH.
-3. **Validar OPA**: Avaliação contra regras de compliance antes de qualquer toque na nuvem.
-4. **Simulação Dry-Run**: Gera o plano de impacto e cálculo de Blast Radius e FinOps sem custos.
-5. **Subir para Nuvem**: Deploy imediato com registro na trilha de auditoria e integração com inventário ao vivo.
-6. **Matriz de Backup e DR**: Monitoramento de réplicas cruzadas entre nuvens com acionamento de Drills e medição de RTO.
+## Execução local
 
----
-
-## 🤖 Integração com MCP (Model Context Protocol) para Claude, Cursor e Continue
-
-O arquivo de configuração está disponível em `/mcp/multicloud-mcp.json`.
-
-### 1. Claude Desktop (`claude_desktop_config.json`)
-```json
-{
-  "mcpServers": {
-    "ai-multicloud-agent": {
-      "command": "node",
-      "args": ["dist/server.cjs"],
-      "env": {
-        "PORT": "3000",
-        "NODE_ENV": "production"
-      }
-    }
-  }
-}
-```
-
-### 2. Cursor IDE (`.cursor/mcp.json`)
-```json
-{
-  "mcpServers": {
-    "multicloud-ops": {
-      "url": "http://localhost:3000/api/agent/chat",
-      "transport": "http"
-    }
-  }
-}
-```
-
-### 3. Continue (`~/.continue/config.json`)
-```json
-{
-  "experimental": {
-    "modelContextProtocolServers": [
-      {
-        "transport": {
-          "type": "stdio",
-          "command": "npx",
-          "args": ["tsx", "server.ts"]
-        }
-      }
-    ]
-  }
-}
-```
-
----
-
-## 🔐 Controle de Acesso Baseado em Perfis (Spring Boot Security RBAC)
-
-| Usuário | Senha Padrão | Role | Permissões & Restrições |
-|---|---|---|---|
-| **admin** | `environment-managed credentials` | `ROLE_ADMIN` | Acesso total irrestrito: aprovação de Blast Radius, parada/início de recursos críticos, cadastro de novas nuvens e exportação de auditoria. |
-| **dev** | `environment-managed credentials` | `ROLE_DEV` | Acesso operacional padrão: consulta de inventário, solicitação de orquestrações e ações de desenvolvimento. Requer aprovação de Blast Radius para operações de alto impacto. |
-| **observer** | `environment-managed credentials` | `ROLE_OBSERVER` | Acesso estritamente somente leitura (*Read-Only*): visualização de dashboards, custos e inventário. Todas as ações destrutivas ou aprovações são bloqueadas pelo sistema. |
-| **finops** | `finops123` | `ROLE_FINOPS` | Especialista em custos: visualização consolidada de faturamento e recomendações de Savings Plans. |
-
----
-
-## 🌐 Internacionalização (i18n) e Temas Visuais
-- **Idiomas:** Português (Brasil - `pt`), Inglês (`en`) e Espanhol (`es`), com persistência local.
-- **Temas de Contraste:** 
-  1. **Escuro Profundo (`dark`)**: Slate 950 otimizado para operações NOC 24/7.
-  2. **Midnight (`midnight`)**: Marinho profundo (`#0b0f19`) de contraste balanceado.
-  3. **Claro Corporativo (`light`)**: Fundo claro executivo para relatórios e luz natural.
-
----
-
-## 🚀 Como Executar
-
-### 1. Aplicação Completa (Frontend React 19 + Gateway na Porta 3000)
 ```bash
 npm install
 npm run dev
 ```
-Acesse `http://localhost:3000`.
 
-### 2. Executar Suíte de Testes
+Produção:
+
 ```bash
-npm test
+npm run build
+NODE_ENV=production npm start
 ```
 
-### 3. Microserviço Backend Spring Boot 3.3 (Porta 8080)
-```bash
-cd backend-springboot
-mvn clean package -DskipTests
-java -jar target/ai-multicloud-agent-backend-1.0.0.jar
-```
+A aplicação usa `PORT` e escuta em `0.0.0.0`, compatível com Cloud Run.
 
+## Dry-run
 
-## Operational readiness (2026-10)
-- Authentication is session-based and credentials are supplied through environment/secret management; no default administrator session is embedded in the frontend.
-- A single optional demonstration profile (`demo/demo`) exists only when `DEMO_MODE=true`, and is read-only.
-- AWS STS/EC2 discovery and AWS EC2 START/STOP/RESTART/TERMINATE lifecycle actions use real provider APIs.
-- Azure, GCP and OCI are reported as `NOT_CONFIGURED` until their real adapters and credentials are connected.
-- IaC validation and policy evaluation are operational. IaC deployment returns `NOT_CONFIGURED` until a real Terraform/native executor is configured; it never fabricates a deployed resource.
-- Cross-cloud backup/DR operations are `NOT_CONFIGURED` until real storage/provider adapters are connected.
-- Dry-run remains the single explicit simulation/example path; it never mutates provider state.
+O projeto mantém **uma única capacidade explícita de simulação**: planejamento dry-run de operações destrutivas. Esse modo é claramente identificado e não altera recursos do provedor.
+
+## MCP
+
+Há artefatos de configuração relacionados a MCP no repositório, mas a implementação operacional principal descrita neste README é a API HTTP Express. Não se deve interpretar esses arquivos como prova de que um servidor FastMCP independente esteja ativo.
+
+## Próximo estágio
+
+Antes de declarar produção plena:
+
+1. adicionar Dockerfile determinístico;
+2. configurar secrets no Cloud Run;
+3. decidir persistência externa para sessões/auditoria/inventário;
+4. validar AWS com credenciais reais de menor privilégio;
+5. manter Azure/GCP/OCI explicitamente `NOT_CONFIGURED` até seus adapters existirem;
+6. executar testes pós-deploy contra endpoints reais.
