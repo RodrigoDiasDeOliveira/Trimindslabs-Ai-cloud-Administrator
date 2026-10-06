@@ -22,30 +22,7 @@ app.use(express.json());
 // In-Memory Multi-Cloud Resource Inventory
 let resources: CloudResource[] = [];
 
-const initialLog1 = AuditCryptoChain.createEntry(undefined, {
-  user: 'rodrigo.ops@multicloud.corp',
-  role: 'ROLE_ADMIN',
-  provider: 'AWS',
-  action: 'DISCOVER_RESOURCES',
-  resourceId: 'ALL_AWS_EAST',
-  riskLevel: 'LOW',
-  status: 'SUCCESS',
-  details: 'Auto-discovery de inventário executado em us-east-1 (14 recursos catalogados).'
-});
-
-const initialLog2 = AuditCryptoChain.createEntry(initialLog1, {
-  user: 'ai-agent-daemon',
-  role: 'ROLE_SECURITY_AUDITOR',
-  provider: 'GCP',
-  action: 'SECURITY_POSTURE_CHECK',
-  resourceId: 'gcp-pg-master-db',
-  riskLevel: 'LOW',
-  status: 'SUCCESS',
-  details: 'Verificação periódica de conformidade CIS v2.0 para PostgreSQL (100% compliant).'
-});
-
-let auditLogs: AuditLog[] = [initialLog2, initialLog1];
-
+let auditLogs: AuditLog[] = [];
 // Initial IaC Catalog (Terraform / YAML / JSON)
 let iacFilesList: IacFile[] = [
   {
@@ -465,7 +442,7 @@ app.get('/api/audit', (req: Request, res: Response) => {
 app.get('/api/governance', (req: Request, res: Response) => {
   const totalCost = resources.reduce((acc, curr) => acc + curr.estimatedMonthlyCost, 0);
   const secureCount = resources.filter(r => r.securityPosture === 'SECURE').length;
-  const complianceScore = Math.round((secureCount / resources.length) * 100);
+  const complianceScore = resources.length === 0 ? 0 : Math.round((secureCount / resources.length) * 100);
 
   res.json({
     complianceScore,
@@ -805,7 +782,7 @@ app.get('/api/reports/executive', (req: Request, res: Response) => {
     status: 'OFFICIAL_AUDITED',
     overview: {
       totalResources: resources.length,
-      activeCloudsCount: 4,
+      activeCloudsCount: providersList.filter(p => p.status === 'CONNECTED').length,
       totalMonthlySpendUsd: totalCost.toFixed(2),
       cisComplianceScore: `${complianceScore}%`,
       auditLedgerIntegrity: integrity.isValid ? 'VERIFIED (SHA-256 Tamper-Proof)' : 'TAMPER_DETECTED'
@@ -844,7 +821,7 @@ app.get('/api/reports/executive', (req: Request, res: Response) => {
 ---
 
 ## 1. Visão Geral dos Ambientes em Nuvem
-- **Provedores Ativos Conectados:** 4 (AWS, Azure, GCP, OCI)
+- **Provedores Ativos Conectados:** ${providersList.filter(p => p.status === 'CONNECTED').length}
 - **Total de Recursos Gerenciados:** ${resources.length}
 - **Gasto Mensal Projetado:** $${totalCost.toFixed(2)} USD
 - **Economia Anual Identificada (FinOps):** $297.60 USD
