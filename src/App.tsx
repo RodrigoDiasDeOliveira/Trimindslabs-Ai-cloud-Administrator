@@ -19,7 +19,7 @@ import {
   AuthUser
 } from './types';
 import { Language, translations } from './i18n';
-import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, X, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
