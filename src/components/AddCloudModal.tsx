@@ -223,19 +223,46 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
         body: JSON.stringify({ provider: selectedProvider, accountName: accountName.trim(), defaultRegion: connectionRegion, credentials, selectedServices })
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.message || data.error || 'Falha ao validar a conexão.');
+      const returnedProvider = typeof data.provider === 'string'
+        ? data.provider
+        : data.provider?.provider || selectedProvider;
+      const credentialsValid = data.credentialsValid;
+      const failedByPayload = data.status === 'FAILED' || credentialsValid === false || data.success === false;
+      const failedByHttp = !res.ok;
+
+      if (failedByPayload || failedByHttp) {
+        const message = data.message || data.error || `Falha ao validar a conexão com ${returnedProvider} (HTTP ${res.status}).`;
+        const failed = {
+          success: false,
+          status: data.status || 'FAILED',
+          provider: returnedProvider,
+          credentialsValid,
+          message,
+          authentication: data.authentication || null,
+          discoveredResources: data.discoveredResources || [],
+          discoveryErrors: data.discoveryErrors || [],
+          httpStatus: res.status,
+          validatedAt: new Date().toISOString()
+        };
+        setErrorMsg(message);
+        setValidationResult(failed);
+        try { localStorage.setItem(resultKey, JSON.stringify(failed)); } catch {}
+        return;
+      }
 
       const result = {
         success: true,
         status: data.status || data.provider?.status || 'CONNECTED',
         provider: data.provider || null,
         authentication: data.authentication || null,
+        credentialsValid: credentialsValid !== false,
         discoveredResources: data.discoveredResources || [],
         discoveryErrors: data.discoveryErrors || [],
         validatedAt: new Date().toISOString()
       };
 
       setValidationResult(result);
+      setErrorMsg(null);
       try { localStorage.setItem(resultKey, JSON.stringify(result)); } catch {}
       persistDraft();
       onCloudAdded(data.provider, data.discoveredResources?.length || 0);
@@ -316,9 +343,19 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
           <div className="mb-5 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900">
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="text-sm font-bold">Validação falhou — ambiente não cadastrado</div>
-                <div className="mt-1 text-xs">{validationResult.message}</div>
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2 text-xs">
+                  <div><span className="text-slate-500">Provider:</span> <strong>{validationResult.provider || selectedProvider}</strong></div>
+                  <div><span className="text-slate-500">Status:</span> <strong className="text-rose-700">{validationResult.status || 'FAILED'}</strong></div>
+                  <div><span className="text-slate-500">Credenciais:</span> <strong className="text-rose-700">{validationResult.credentialsValid === false ? 'Inválidas' : 'Não confirmadas'}</strong></div>
+                  {validationResult.httpStatus && <div><span className="text-slate-500">HTTP:</span> <strong>{validationResult.httpStatus}</strong></div>}
+                  <div className="sm:col-span-2">
+                    <span className="text-slate-500">Motivo:</span>
+                    <div className="mt-1 break-words font-mono text-[11px] bg-white/70 border border-rose-100 rounded-lg p-2">{validationResult.message}</div>
+                  </div>
+                  <div><span className="text-slate-500">Verificado em:</span> <strong>{new Date(validationResult.validatedAt).toLocaleString()}</strong></div>
+                </div>
               </div>
             </div>
           </div>
@@ -768,7 +805,7 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
               ) : (
                 <Plus className="w-4 h-4" />
               )}
-              <span>{isLoading ? 'Validando conexão real...' : validationResult?.success ? 'Validação concluída' : 'Validar e Cadastrar Ambiente'}</span>
+              <span>{isLoading ? 'Validando conexão real...' : validationResult?.success ? 'Validação concluída' : validationResult?.success === false ? 'Tentar validação novamente' : 'Validar e Cadastrar Ambiente'}</span>
             </button>
           </div>
         </form>
