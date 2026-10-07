@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Cloud, 
   Server, 
@@ -88,6 +88,69 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
 
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [validationResult, setValidationResult] = useState<any | null>(null);
+
+  const draftKey = 'multicloud_cloud_registration_draft_v1';
+  const resultKey = 'multicloud_cloud_registration_result_v1';
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft.selectedProvider) setSelectedProvider(draft.selectedProvider);
+        if (draft.defaultRegion) setDefaultRegion(draft.defaultRegion);
+        if (draft.accountName) setAccountName(draft.accountName);
+        if (draft.awsAccessKey) setAwsAccessKey(draft.awsAccessKey);
+        if (draft.awsAccountId) setAwsAccountId(draft.awsAccountId);
+        if (draft.awsRoleArn) setAwsRoleArn(draft.awsRoleArn);
+        if (draft.azureTenantId) setAzureTenantId(draft.azureTenantId);
+        if (draft.azureClientId) setAzureClientId(draft.azureClientId);
+        if (draft.azureSubId) setAzureSubId(draft.azureSubId);
+        if (draft.azureResourceGroup) setAzureResourceGroup(draft.azureResourceGroup);
+        if (draft.gcpProjectId) setGcpProjectId(draft.gcpProjectId);
+        if (draft.gcpServiceAccount) setGcpServiceAccount(draft.gcpServiceAccount);
+        if (draft.gcpZone) setGcpZone(draft.gcpZone);
+        if (draft.ociTenancyOcid) setOciTenancyOcid(draft.ociTenancyOcid);
+        if (draft.ociUserOcid) setOciUserOcid(draft.ociUserOcid);
+        if (draft.ociFingerprint) setOciFingerprint(draft.ociFingerprint);
+        if (draft.ociCompartment) setOciCompartment(draft.ociCompartment);
+      }
+      const savedResult = localStorage.getItem(resultKey);
+      if (savedResult) setValidationResult(JSON.parse(savedResult));
+    } catch {}
+  }, []);
+
+  const persistDraft = () => {
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({
+        selectedProvider,
+        defaultRegion,
+        accountName,
+        awsAccessKey,
+        awsAccountId,
+        awsRoleArn,
+        azureTenantId,
+        azureClientId,
+        azureSubId,
+        azureResourceGroup,
+        gcpProjectId,
+        gcpServiceAccount,
+        gcpZone,
+        ociTenancyOcid,
+        ociUserOcid,
+        ociFingerprint,
+        ociCompartment,
+        savedAt: new Date().toISOString()
+      }));
+    } catch {}
+  };
+
+  const handleClose = () => {
+    persistDraft();
+    setAwsSecretKey('');
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -108,6 +171,8 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
     e.preventDefault();
     setIsLoading(true);
     setErrorMsg(null);
+    setValidationResult(null);
+    persistDraft();
 
     try {
       const connectionRegion = selectedProvider === 'GCP'
@@ -159,18 +224,41 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || data.error || 'Falha ao validar a conexão.');
+
+      const result = {
+        success: true,
+        status: data.status || data.provider?.status || 'CONNECTED',
+        provider: data.provider || null,
+        authentication: data.authentication || null,
+        discoveredResources: data.discoveredResources || [],
+        discoveryErrors: data.discoveryErrors || [],
+        validatedAt: new Date().toISOString()
+      };
+
+      setValidationResult(result);
+      try { localStorage.setItem(resultKey, JSON.stringify(result)); } catch {}
+      persistDraft();
       onCloudAdded(data.provider, data.discoveredResources?.length || 0);
-      onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Erro ao processar conexão da nuvem.');
+      const message = err.message || 'Erro ao processar conexão da nuvem.';
+      setErrorMsg(message);
+      const failed = {
+        success: false,
+        status: 'FAILED',
+        provider: selectedProvider,
+        message,
+        validatedAt: new Date().toISOString()
+      };
+      setValidationResult(failed);
+      try { localStorage.setItem(resultKey, JSON.stringify(failed)); } catch {}
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-      <div className={`w-full max-w-3xl rounded-2xl border shadow-2xl p-6 relative my-8 transition-all ${
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center p-3 sm:p-5 overflow-y-auto">
+      <div className={`w-full max-w-3xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border shadow-2xl p-5 sm:p-6 relative my-2 sm:my-4 transition-all ${
         theme === 'light'
           ? 'bg-white border-slate-200 text-slate-900'
           : theme === 'midnight'
@@ -179,8 +267,9 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
       }`}>
         {/* Close Button */}
         <button
-          onClick={onClose}
-          className="absolute top-5 right-5 p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors cursor-pointer"
+          onClick={handleClose}
+          aria-label="Fechar"
+          className="absolute top-4 right-4 p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 transition-colors cursor-pointer z-10"
         >
           <X className="w-5 h-5" />
         </button>
@@ -200,8 +289,43 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
           </div>
         </div>
 
-        {errorMsg && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-start space-x-2">
+        {validationResult?.success && (
+          <div className="mb-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-slate-800">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center flex-shrink-0">
+                <Check className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-bold text-emerald-800">Conexão validada e ambiente cadastrado</div>
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-2 text-xs">
+                  <div><span className="text-slate-500">Provider:</span> <strong>{validationResult.provider?.provider || selectedProvider}</strong></div>
+                  <div><span className="text-slate-500">Status:</span> <strong className="text-emerald-700">{validationResult.status}</strong></div>
+                  <div><span className="text-slate-500">Região:</span> <strong>{validationResult.provider?.defaultRegion || defaultRegion}</strong></div>
+                  <div><span className="text-slate-500">Recursos descobertos:</span> <strong>{validationResult.discoveredResources?.length ?? 0}</strong></div>
+                  {validationResult.authentication?.accountId && <div><span className="text-slate-500">Account ID:</span> <strong>{validationResult.authentication.accountId}</strong></div>}
+                  {validationResult.authentication?.arn && <div className="truncate"><span className="text-slate-500">Identity:</span> <strong title={validationResult.authentication.arn}>{validationResult.authentication.arn}</strong></div>}
+                  <div><span className="text-slate-500">Validado em:</span> <strong>{new Date(validationResult.validatedAt).toLocaleString()}</strong></div>
+                  <div><span className="text-slate-500">Credenciais:</span> <strong className="text-emerald-700">Válidas</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {validationResult?.success === false && (
+          <div className="mb-5 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-sm font-bold">Validação falhou — ambiente não cadastrado</div>
+                <div className="mt-1 text-xs">{validationResult.message}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {errorMsg && !validationResult?.success && !validationResult?.message && (
+          <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start space-x-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
@@ -618,11 +742,16 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
             </div>
           </div>
 
+          <div className="text-[11px] text-slate-500 flex items-center gap-2">
+            <span>Rascunho salvo localmente sem a Secret Access Key.</span>
+            {validationResult?.success && <span className="text-emerald-700 font-semibold">• Última validação concluída com sucesso</span>}
+          </div>
+
           {/* Action Buttons */}
           <div className="pt-4 border-t border-slate-800 flex items-center justify-end space-x-3">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 py-2 rounded-xl border border-slate-700 text-xs font-medium text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
             >
               {t.btnCancel}
@@ -634,10 +763,12 @@ export const AddCloudModal: React.FC<AddCloudModalProps> = ({
             >
               {isLoading ? (
                 <div className="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+              ) : validationResult?.success ? (
+                <Check className="w-4 h-4" />
               ) : (
                 <Plus className="w-4 h-4" />
               )}
-              <span>{isLoading ? 'Validando conexão real...' : 'Validar e Cadastrar Ambiente'}</span>
+              <span>{isLoading ? 'Validando conexão real...' : validationResult?.success ? 'Validação concluída' : 'Validar e Cadastrar Ambiente'}</span>
             </button>
           </div>
         </form>
