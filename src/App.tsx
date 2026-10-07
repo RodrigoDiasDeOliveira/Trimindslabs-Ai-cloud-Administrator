@@ -46,6 +46,7 @@ export default function App() {
 
   // Modal States
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
   const [isAddCloudModalOpen, setIsAddCloudModalOpen] = useState<boolean>(false);
   const [notification, setNotification] = useState<{ type: 'success' | 'warning' | 'info'; text: string } | null>(null);
 
@@ -103,6 +104,19 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('multicloud_user');
+    setResources([]);
+    setProviders([]);
+    setAuditLogs([]);
+    setGovernance({
+      complianceScore: 0,
+      totalMonthlyEstimate: '0.00',
+      activeCloudCount: 0,
+      totalResources: 0,
+      policies: [],
+      costOptimizationRecommendations: []
+    });
+    setMessages([]);
+    setIsLoginModalOpen(true);
     setNotification({
       type: 'info',
       text: language === 'pt' ? 'Sessão encerrada com sucesso.' : 'Logged out successfully.'
@@ -110,18 +124,49 @@ export default function App() {
     setTimeout(() => setNotification(null), 3000);
   };
 
+  // Bootstrap authentication before rendering any operational UI.
   useEffect(() => {
-    if (!currentUser?.token) return;
-    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${currentUser.token}` } })
+    const saved = localStorage.getItem('multicloud_user');
+
+    if (!saved) {
+      setCurrentUser(null);
+      setIsLoginModalOpen(true);
+      setIsAuthChecking(false);
+      return;
+    }
+
+    let parsed: AuthUser | null = null;
+    try {
+      parsed = JSON.parse(saved);
+    } catch {
+      parsed = null;
+    }
+
+    if (!parsed?.token) {
+      setCurrentUser(null);
+      localStorage.removeItem('multicloud_user');
+      setIsLoginModalOpen(true);
+      setIsAuthChecking(false);
+      return;
+    }
+
+    fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${parsed.token}` }
+    })
       .then(async (res) => {
         if (!res.ok) throw new Error('Session expired');
         const verified = await res.json();
-        setCurrentUser((prev) => prev ? { ...prev, ...verified } : prev);
+        const authenticated = { ...parsed, ...verified } as AuthUser;
+        setCurrentUser(authenticated);
+        localStorage.setItem('multicloud_user', JSON.stringify(authenticated));
+        setIsLoginModalOpen(false);
       })
       .catch(() => {
         setCurrentUser(null);
         localStorage.removeItem('multicloud_user');
-      });
+        setIsLoginModalOpen(true);
+      })
+      .finally(() => setIsAuthChecking(false));
   }, []);
 
   // Fetch initial data
@@ -342,6 +387,35 @@ export default function App() {
   // Theme container classes
   const themeContainerClass = 'bg-slate-50 text-slate-950';
 
+  // Never render operational content until the backend confirms the session.
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-950 flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl p-8 text-center">
+          <div className="mx-auto mb-4 w-12 h-12 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-200">
+            <ShieldCheck className="w-6 h-6" />
+          </div>
+          <h1 className="text-lg font-bold tracking-tight">AI Cloud Administrator</h1>
+          <p className="mt-2 text-sm text-slate-500">Validando a sessão...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-950">
+        <LoginModal
+          isOpen={true}
+          onClose={() => undefined}
+          onLoginSuccess={handleLoginSuccess}
+          currentLanguage={language}
+          dismissible={false}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors duration-200 ${themeContainerClass}`}>
       {/* Global Toast Notification */}
@@ -463,14 +537,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Login / Switch User Modal */}
-      <LoginModal
-        isOpen={isLoginModalOpen}
-        onClose={() => setIsLoginModalOpen(false)}
-        onLoginSuccess={handleLoginSuccess}
-        currentLanguage={language}
-        theme={theme}
-      />
+      {/* Login is rendered as the application entry point when unauthenticated. */}
 
       {/* Add Cloud Provider Modal */}
       <AddCloudModal
