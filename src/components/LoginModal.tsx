@@ -18,6 +18,7 @@ interface LoginModalProps {
   onClose: () => void;
   onLoginSuccess: (user: AuthUser) => void;
   currentLanguage: Language;
+  dismissible?: boolean;
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({
@@ -25,6 +26,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onClose,
   onLoginSuccess,
   currentLanguage,
+  dismissible = true,
 }) => {
   const t = translations[currentLanguage];
   const [username, setUsername] = useState('admin');
@@ -64,12 +66,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-950/30 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-2xl p-6 relative transition-all">
         {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100/50 transition-colors cursor-pointer"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {dismissible && (
+          <button
+            onClick={onClose}
+            type="button"
+            aria-label="Fechar"
+            className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100/50 transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
 
         {/* Header */}
         <div className="flex items-center space-x-3 mb-5">
