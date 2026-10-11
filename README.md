@@ -1,122 +1,90 @@
 # Trimindslabs AI Cloud Administrator
 
-> **Estado:** MVP operacional / Work in Progress — preparado para validação de deploy, com capacidades reais explicitamente separadas das que ainda estão `NOT_CONFIGURED`.
+MVP for multi-cloud administration, inventory, governance, observability, audit trails, and AI-assisted operations. This README describes the current primary runtime, not every auxiliary artifact in the repository.
 
-Plataforma React + TypeScript + Express para administração multi-cloud, inventário, governança, observabilidade, auditoria encadeada e orquestração assistida por IA.
+![AI Cloud Administrator architecture](./docs/diagrams/ai-cloud-administrator-architecture.svg)
 
-## Estado operacional real
+## Current runtime
 
-### Configurado / operacional
-- React 19 + TypeScript + Vite no frontend.
-- Express como runtime HTTP, frontend e backend no mesmo processo.
-- Autenticação por sessão em memória; credenciais de produção vêm de variáveis de ambiente/secrets.
-- Um único perfil `demo/demo` pode existir somente com `DEMO_MODE=true`; é somente leitura.
-- AWS: health probe via STS, descoberta de instâncias EC2 e ações START/STOP/RESTART/TERMINATE através dos SDKs reais.
-- Motor interno de políticas de governança para avaliação de recursos e IaC.
-- Dry-run explícito para planejamento de operações destrutivas; não altera estado do provedor.
-- Auditoria com encadeamento SHA-256 e verificação de integridade.
-- Tracing interno de operações.
+- Frontend: React 19, TypeScript, Vite.
+- Primary HTTP runtime: Node.js / Express; frontend and API are served by the same process.
+- Authentication: in-memory sessions; restart or instance replacement loses session state.
+- Internal governance rules for resource and IaC evaluation.
+- Audit integrity via SHA-256 hash chaining and integrity verification.
+- Internal operation tracing.
+- AI responses do not implicitly execute infrastructure changes.
 
-### NOT_CONFIGURED / ainda não operacional
-- Azure, GCP e OCI: sem adapter real de lifecycle/health conectado nesta versão.
-- Deploy de IaC: validação/política disponíveis; execução Terraform/native ainda não conectada.
-- Backup e Disaster Recovery cross-cloud: sem adapter real de armazenamento/provedor e sem agendamento persistente.
-- Persistência de inventário, sessões e auditoria: atualmente em memória; reinício/escala do Cloud Run perde esse estado.
-- Relatórios de FinOps: somente dados efetivamente presentes no inventário são calculados; nenhuma economia fixa é afirmada.
-- Conformidade: o motor local avalia regras próprias; **não é uma instalação/runtime do OPA Gatekeeper**.
+A legacy/auxiliary Spring Boot backend exists in the repository. The root Docker/build path and primary runtime described here use Node/Express; Spring Boot code does not mean it is the active Cloud Run runtime. ADRs must identify whether Spring Boot is historical, auxiliary, or a future target.
 
-## Arquitetura atual
+## Provider capability status
 
-```
-React 19 / TypeScript / Vite
-          |
-          v
-Express API + AI orchestration + policy engine
-          |
-          +--> AWS SDKs (real, quando credentials estão configuradas)
-          +--> Azure / GCP / OCI (NOT_CONFIGURED)
-          +--> Gemini API (respostas de IA, sem mutação implícita)
-          +--> SHA-256 audit chain
-          +--> internal telemetry
-```
+| Provider / capability | Status in this version |
+|---|---|
+| AWS health probe, EC2 discovery/actions | Implemented through AWS SDKs when valid credentials and permissions are configured |
+| Azure lifecycle/health adapter | NOT_CONFIGURED |
+| GCP lifecycle/health adapter | NOT_CONFIGURED |
+| OCI lifecycle/health adapter | NOT_CONFIGURED |
+| IaC policy/validation | Implemented |
+| Terraform/native IaC execution | Not connected |
+| Cross-cloud backup/DR | No real provider/storage adapter or persistent scheduler |
+| Inventory, sessions, audit state | In-memory; not durable across restart/scale |
+| OPA Gatekeeper | Not integrated; local policy engine is not OPA |
+| MCP | Configuration artifacts do not prove an independently running FastMCP server |
 
-Existe código legado/auxiliar Spring Boot no repositório, mas o caminho principal atual de execução é o runtime Node/Express. Ele não deve ser interpretado como um backend Spring obrigatório para o deploy atual.
+The demo identity demo/demo is available only when DEMO_MODE=true and is read-only. Do not enable demo mode as a production authentication strategy.
 
-## Princípio de execução
+## Execution semantics
 
-A plataforma não transforma planejamento, resposta de IA ou dry-run em execução real.
+- AI response: advisory output; no infrastructure mutation.
+- Dry-run: produces a plan without provider side effects.
+- Real execution: possible only through a configured real adapter and permitted credentials.
+- Missing adapter: report NOT_CONFIGURED; do not simulate successful provider operations.
+- Critical destructive action: requires configured critical-execution permission and applicable approval guardrails.
 
-- **AI response:** gera análise/resposta; `infrastructureExecution=NOT_PERFORMED`.
-- **Dry-run:** produz plano sem efeitos colaterais.
-- **Real execution:** somente ocorre através de um adapter real configurado.
-- **Provider sem adapter:** retorna `NOT_CONFIGURED` / `REAL_PROVIDER_ADAPTER_NOT_CONFIGURED`.
-- Nenhum recurso fictício é criado para representar sucesso.
+## Architecture
 
-## Segurança
+    React / TypeScript / Vite
+              |
+              v
+    Node.js / Express API
+       |         |         |
+       v         v         v
+    AWS SDK   Policy     SHA-256 audit chain
+    adapters  engine    + internal telemetry
 
-- Credenciais não são embutidas no frontend.
-- Operações administrativas exigem sessão autenticada e permissões apropriadas.
-- TERMINATE exige `EXECUTE_CRITICAL`.
-- O perfil demo é read-only.
-- Ações destrutivas podem ser interceptadas pelo guardrail e exigir aprovação humana.
-- Não há credenciais padrão válidas no código.
+    Azure / GCP / OCI: NOT_CONFIGURED
 
-> Para Cloud Run, recomenda-se Secret Manager para `GEMINI_API_KEY`, credenciais AWS e credenciais administrativas.
+## Local development and validation
 
-## Relatórios e governança
+Use the Node.js version supported by the lockfile and package configuration.
 
-Os endpoints de governança e relatório distinguem:
-- dados derivados do inventário real;
-- dados ainda não configurados;
-- resultados que exigem revisão;
-- ausência de evidência.
+    npm install
+    npm run dev
+    npm test
+    npm run lint
+    npm run build
 
-Nenhuma economia anual, réplica cross-cloud, score de política ou status de auditoria é apresentado como realizado sem evidência runtime correspondente.
+Production process (does not itself deploy to Cloud Run):
 
-## Testes
+    npm run build
+    NODE_ENV=production npm start
 
-Execute:
+The application reads PORT and binds to 0.0.0.0 for container compatibility. The root Dockerfile exists, but a Dockerfile or successful CI run is not proof of a current Cloud Run deployment. Verify deployed image digest, commit, revision, traffic, service account, secrets, and health endpoints before claiming a release is live.
 
-```bash
-npm install
-npm test
-npm run lint
-npm run build
-```
+## Configuration and security
 
-A pipeline CI executa instalação, TypeScript, testes e build de produção.
+Supply administrative credentials, GEMINI_API_KEY, and AWS credentials through deployment environment or Secret Manager as appropriate. Never place secrets in source control or frontend variables. Use least-privilege provider permissions. Sessions, inventory, and audit records currently lack durable external persistence.
 
-## Execução local
+## Documentation
 
-```bash
-npm install
-npm run dev
-```
+- [Architecture diagram](./docs/diagrams/ai-cloud-administrator-architecture.svg)
+- [ADRs](./docs/adr/) — distinguish current Node/Express runtime from auxiliary Spring Boot code.
+- Deployment claims must cite a verifiable workflow run and deployed Cloud Run revision.
 
-Produção:
+## Before production promotion
 
-```bash
-npm run build
-NODE_ENV=production npm start
-```
-
-A aplicação usa `PORT` e escuta em `0.0.0.0`, compatível com Cloud Run.
-
-## Dry-run
-
-O projeto mantém **uma única capacidade explícita de simulação**: planejamento dry-run de operações destrutivas. Esse modo é claramente identificado e não altera recursos do provedor.
-
-## MCP
-
-Há artefatos de configuração relacionados a MCP no repositório, mas a implementação operacional principal descrita neste README é a API HTTP Express. Não se deve interpretar esses arquivos como prova de que um servidor FastMCP independente esteja ativo.
-
-## Próximo estágio
-
-Antes de declarar produção plena:
-
-1. adicionar Dockerfile determinístico;
-2. configurar secrets no Cloud Run;
-3. decidir persistência externa para sessões/auditoria/inventário;
-4. validar AWS com credenciais reais de menor privilégio;
-5. manter Azure/GCP/OCI explicitamente `NOT_CONFIGURED` até seus adapters existirem;
-6. executar testes pós-deploy contra endpoints reais.
+1. Decide and record the supported primary runtime (Node/Express or Spring Boot).
+2. Verify the exact image digest and commit associated with any existing Cloud Run service.
+3. Move sessions, inventory, and audit history to durable storage if restart/scale survival is required.
+4. Validate AWS with least-privilege credentials; keep other providers NOT_CONFIGURED until real adapters are tested.
+5. Run post-deployment smoke tests against the deployed revision.
