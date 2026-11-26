@@ -9,6 +9,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -20,7 +22,15 @@ public class AuthController {
 
     private final UserDetailsService users;
     private final PasswordEncoder passwordEncoder;
-    private final Map<String, AuthResponseDto> sessions = new ConcurrentHashMap<>();
+    private record Session(AuthResponseDto response, Instant expiresAt) {}
+    private static final Duration SESSION_TTL = Duration.ofHours(8);
+    private final Map<String, Session> sessions = new ConcurrentHashMap<>();
+
+    private void registerSession(AuthResponseDto response) {
+        Instant now = Instant.now();
+        sessions.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(now));
+        sessions.put(response.getToken(), new Session(response, now.plus(SESSION_TTL)));
+    }
 
     public AuthController(UserDetailsService users, PasswordEncoder passwordEncoder) {
         this.users = users;
@@ -39,7 +49,7 @@ public class AuthController {
                     "ROLE_OBSERVER",
                     List.of("READ", "VIEW_AUDIT")
             );
-            sessions.put(demo.getToken(), demo);
+            registerSession(demo);
             return ResponseEntity.ok(demo);
         }
 
@@ -68,7 +78,7 @@ public class AuthController {
                     role,
                     permissions
             );
-            sessions.put(response.getToken(), response);
+            registerSession(response);
             return ResponseEntity.ok(response);
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Credenciais inválidas"));
@@ -80,10 +90,15 @@ public class AuthController {
         if (token == null || !token.startsWith("Bearer ")) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Token não fornecido"));
         }
-        AuthResponseDto session = sessions.get(token.substring(7));
+        String key = token.substring(7);
+        Session session = sessions.get(key);
+        if (session != null && !session.expiresAt().isAfter(Instant.now())) {
+            sessions.remove(key, session);
+            session = null;
+        }
         if (session == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Sessão inválida ou expirada"));
         }
-        return ResponseEntity.ok(session);
+        return ResponseEntity.ok(session.response());
     }
 }
